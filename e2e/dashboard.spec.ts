@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('dashboard controls, navigation, API tests and diagnostics work', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/dashboard');
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.locator('.log-row')).toHaveCount(1);
   await expect(page.locator('.log-row')).toHaveCount(2, { timeout: 6000 });

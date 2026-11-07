@@ -8,13 +8,16 @@
     "start": "next start -H 0.0.0.0",
     "test": "node --test test/*.test.js && python3 -m unittest discover -s test -p 'test_*.py'",
     "test:e2e": "playwright test",
-    "test:vision": "node --test test/vision.integration.cjs"
+    "test:vision": "node --test test/vision.integration.cjs",
+    "test:chart": "node --test test/chart.integration.cjs"
   },
   "dependencies": {
+    "lightweight-charts": "^4.2.3",
     "lucide-react": "^0.468.0",
     "next": "^16.4.5",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "ws": "^8.22.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
@@ -22,6 +25,7 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/ws": "^8.18.2",
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3"
   },
