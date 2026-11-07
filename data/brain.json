@@ -1,0 +1,10 @@
+{
+  "system_name": "M5 BOS -> 0.382 -> M1 VLB + Engulf",
+  "htf": "M5 BOS required",
+  "entry_zone": "0.382 fib retrace",
+  "ltf_confirm": ["M1 Valid Liquidity Build", "Engulfing"],
+  "risk": "0.5-1% , SL beyond VLB",
+  "mt5_connected": false,
+  "scanning": false,
+  "source": "Derived from trade-journal-learning local-only"
+}

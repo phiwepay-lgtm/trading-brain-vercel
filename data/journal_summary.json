@@ -1,0 +1,10 @@
+{
+  "status": "awaiting_verified_data",
+  "total_valid": null,
+  "wins": null,
+  "losses": null,
+  "breakeven": null,
+  "win_rate": null,
+  "note": "Stats unavailable - local journal is encrypted/local-only. Awaiting verified 33 export. No raw journal copied.",
+  "recovery_export_40": "found but rejected due to inconsistent outcomes/PnL"
+}
