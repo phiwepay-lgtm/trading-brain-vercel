@@ -4,3 +4,5 @@ node_modules/
 .vercel/
 __pycache__/
 *.py[cod]
+playwright-report/
+test-results/

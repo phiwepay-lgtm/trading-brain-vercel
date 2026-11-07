@@ -6,7 +6,8 @@
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start -H 0.0.0.0",
-    "test": "node --test test/*.test.js && python3 -m unittest discover -s test -p 'test_*.py'"
+    "test": "node --test test/*.test.js && python3 -m unittest discover -s test -p 'test_*.py'",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -15,6 +16,7 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
@@ -22,5 +24,7 @@
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3"
   },
-  "engines": { "node": ">=20.9.0" }
+  "engines": {
+    "node": ">=20.9.0"
+  }
 }
