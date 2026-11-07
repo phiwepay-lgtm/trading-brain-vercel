@@ -40,4 +40,4 @@ The script refuses a different count, invalid flags, unrecognized or conflicting
 
 ## Deploy to Vercel
 
-Import this Git repository into Vercel, select the **Next.js** framework preset and deploy. No environment variables or external services are required. The default Next.js build command is `npm run build`.
+Import this Git repository into Vercel, select the **Next.js** framework preset and deploy. No environment variables or external services are required. Set the build command to `npm run build` and the install command to `npm install`. Leave the output directory override unset so Vercel uses the Next.js default. `vercel.json` identifies the project as Next.js. The app uses Next.js 16; downgrading to Next.js 14 is not needed for deployment and would introduce known security advisories.
