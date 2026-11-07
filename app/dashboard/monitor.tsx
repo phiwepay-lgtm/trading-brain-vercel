@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, ArrowDownRight, ArrowRight, BarChart3, BookOpen, Braces, CheckCircle2, ChevronRight, CircleHelp, Clock3, Database, ExternalLink, FileTerminal, Gauge, LayoutDashboard, LoaderCircle, Pause, Play, Radio, RefreshCw, ShieldCheck, TerminalSquare, Trash2, Wallet, WifiOff } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowRight, BarChart3, BookOpen, Braces, Upload, Download, CheckCircle2, ChevronRight, CircleHelp, Clock3, Database, ExternalLink, FileTerminal, Gauge, LayoutDashboard, LoaderCircle, Pause, Play, Radio, RefreshCw, ShieldCheck, TerminalSquare, Trash2, Wallet, WifiOff } from 'lucide-react';
 
 type Status = { mt5_connected: boolean; scanning: boolean; bot_status: string; last_trade_time: string | null; pnl_today: number | null; source: string; checked_at: string };
 type Trade = { time: string; pair: string; action: string; price: number; profit: number };
@@ -125,6 +125,8 @@ export default function Monitor() {
         <a href="#live-trades" onClick={nav('live trades')}><BarChart3 size={16} /> Live trades</a>
         <a href="#activity-logs" onClick={nav('activity logs')}><FileTerminal size={16} /> Activity logs</a>
         <a href="#api-checks" onClick={nav('API checks')}><Braces size={16} /> API checks</a>
+        <a href="/brain" onClick={nav('chart assessment')}><Upload size={16} /> Upload setup</a>
+        <a href="/ea" onClick={nav('EA downloads')}><Download size={16} /> EA download center</a>
         <a href="/playbook" onClick={nav('playbook')}><BookOpen size={16} /> My playbook <ExternalLink size={12} className="nav-external" /></a>
       </nav>
       <div className="monitor-sidebar-foot"><div className="sidebar-note"><ShieldCheck size={17} /><div><strong>Built for your process</strong><p>Clarity, without the noise.</p></div></div><div className="sidebar-meta"><span className="dot" /> PRIVATE WORKSPACE <span>V 2.0</span></div></div>
@@ -132,8 +134,8 @@ export default function Monitor() {
     <main className="monitor-main" id="overview">
       <header className="monitor-topbar"><div className="crumb"><span>WORKSPACE</span><i>/</i><strong>OVERVIEW</strong></div><div className="topbar-right"><span className="topbar-label">SYSTEM STATUS</span><span className="offline-tag"><span /> {status?.mt5_connected ? 'CONNECTED' : status ? 'DISCONNECTED' : 'UNKNOWN'}</span></div></header>
       <div className="monitor-content">
-        <div className="monitor-heading"><div><div className="overline"><span className="overline-dash" /> THE TRADING BRAIN <span className="overline-separator">/</span> MONITOR</div><h1>Your edge, <em>in focus.</em></h1><p>A clearer view of your system, all in one place.</p></div><button type="button" className="refresh-button" onClick={() => void poll(true)} disabled={refreshing} aria-busy={refreshing}><RefreshCw size={15} className={refreshing ? 'spin' : ''} /> {refreshing ? 'Refreshing…' : 'Refresh data'}</button></div>
-        <div className="mobile-nav" aria-label="Mobile navigation"><a href="#overview" onClick={nav('overview')}>Overview</a><a href="#live-trades" onClick={nav('live trades')}>Trades</a><a href="#activity-logs" onClick={nav('activity logs')}>Logs</a><a href="#api-checks" onClick={nav('API checks')}>API</a><a href="/playbook" onClick={nav('playbook')}>Playbook ↗</a></div>
+        <div className="monitor-heading"><div><div className="overline"><span className="overline-dash" /> THE TRADING BRAIN <span className="overline-separator">/</span> MONITOR</div><h1>Your edge, <em>in focus.</em></h1><p>A clearer view of your system, all in one place.</p></div><div className="heading-buttons"><a href="/brain" className="upload-setup-button" onClick={nav('chart assessment')}><Upload size={15} /> Upload Setup</a><button type="button" className="refresh-button" onClick={() => void poll(true)} disabled={refreshing} aria-busy={refreshing}><RefreshCw size={15} className={refreshing ? 'spin' : ''} /> {refreshing ? 'Refreshing…' : 'Refresh data'}</button></div></div>
+        <div className="mobile-nav" aria-label="Mobile navigation"><a href="#overview" onClick={nav('overview')}>Overview</a><a href="#live-trades" onClick={nav('live trades')}>Trades</a><a href="#activity-logs" onClick={nav('activity logs')}>Logs</a><a href="#api-checks" onClick={nav('API checks')}>API</a><a href="/brain" onClick={nav('chart assessment')}>Upload setup</a><a href="/ea" onClick={nav('EA downloads')}>EA downloads</a><a href="/playbook" onClick={nav('playbook')}>Playbook ↗</a></div>
         <section className="connection-notice" aria-label="Connection notice"><div className="connection-notice-icon"><WifiOff size={18} /></div><div><strong>Observation mode</strong><p>{statusNote} Live trading data will appear when a real integration is configured.</p></div><span className="connection-pill"><span /> MT5 {status?.mt5_connected ? 'CONNECTED' : status ? 'DISCONNECTED' : 'UNKNOWN'}</span></section>
         <div className="feedback-line" role="status" aria-live="polite"><CheckCircle2 size={13} /> <span>{feedback}</span></div>
         {pollError && <div className="poll-error" role="alert">{pollError}</div>}
