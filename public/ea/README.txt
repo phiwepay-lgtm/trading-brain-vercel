@@ -1,35 +1,42 @@
-TRADING BRAIN - MT5 EA INSTALL GUIDE
+TRADING BRAIN - SOURCE PACKAGE AND INSTALL GUIDE
 
-IMPORTANT: This is an unverified sample EA, not a production-ready trading system.
-The current /api/signal endpoint always returns HOLD. Chart image assessments do
-not feed the EA. MT5, scanning, trades and signal generation are not connected.
-The source has not been compiled or broker-tested in this environment.
+SAFETY: These are source files for manual review, not a production trading
+system. The EA is uncompiled and broker-untested. Its EnableTrading default is
+false and DemoOnly default is true. The current /api/signal returns HOLD, chart
+assessments are not signals, and MT5/scanning are not connected. The existing
+EA code CAN place orders if explicitly enabled and given a valid BUY/SELL
+signal; do not enable it or use a live account. No EX5 file is supplied.
 
-1. Download TradingBrain.mq5 and place it in your MT5 Data Folder under
-   MQL5/Experts (in MT5: File > Open Data Folder).
-2. Open MetaEditor, open TradingBrain.mq5, and compile. Resolve any errors before
-   continuing. The .ex5 executable is created locally; no executable is provided.
-3. In MT5: Tools > Options > Expert Advisors > Allow WebRequest for listed URL.
-   Add https://trading-brain-vercel.vercel.app (the origin, not /api/signal).
-4. Restart or refresh the Navigator. Attach TradingBrain to a DEMO chart matching
-   the exact broker symbol and enable AutoTrading only after reviewing the code.
-5. Defaults are Lots=0.1, Magic=12345, EnableTrading=false, DemoOnly=true.
-   EnableTrading must be set true explicitly before any order can be sent. Keep
-   DemoOnly=true. Fixed Lots do not enforce the brain's 0.5-1% risk rule.
-6. See the Experts/Journal tabs for HTTP response and order results. WebRequest
-   runs on ticks and may block the EA while waiting. It does not work in the MT5
-   Strategy Tester. No order occurs while the endpoint returns HOLD.
-7. A future verified, authenticated signal service must provide flat JSON with
-   action BUY or SELL, symbol (exact chart symbol), confidence (>70 and <=100),
-   sl and tp (prices), signal_id (strictly increasing positive integer up to 2^53-1), and
-   expires_at (UTC Unix seconds within the allowed lifetime). The EA rejects
-   mismatched, stale, duplicate or malformed signals, high spreads and open
-   positions on the symbol. It attaches SL/TP; it does not trail/manage exits.
-8. Do not enable live trading without an independent security and broker review,
-   a trusted authenticated signal service, risk sizing, and extensive testing.
-   HTTPS alone does not authenticate a signal producer; this sample does not
-   implement signal authentication and must be modified before any real feed. Chart AI confidence is
-   uncalibrated and must never be treated as a trading guarantee.
+METATRADER 5
+1. Place TradingBrain.mq5 in the MT5 data folder under MQL5/Experts (File >
+   Open Data Folder). Open it in MetaEditor and compile locally, resolving any
+   errors. This creates an EX5 locally; the package does not include one.
+2. For review, use a demo account and keep EnableTrading=false, DemoOnly=true,
+   and AutoTrading disabled. No signal feed or trading connection is provided.
+3. The sample can request the public HOLD endpoint through MT5 WebRequest if
+   configured, but it is not an authenticated signal service. Fixed lot sizing
+   does not enforce the brain's percentage-risk rule. Do not enable trading
+   without independent security, broker, signal and risk-management review.
 
-The server has no authentication or real signal provider at this time. API_URL
-is a public HOLD endpoint; nobody should rely on this example for live orders.
+TRADINGVIEW
+1. Open the Pine Editor, paste TradingBrain_GOLD_M1_VLB_VHB.pine, save and add
+   it to an M1 GOLD chart. Prices depend on the TradingView data provider.
+2. This indicator is a comment-only skeleton. The requested detection, markers,
+   FVG zone and statistics table are NOT implemented. It does not detect setups,
+   calculate results or place orders. Manually review the intended logic and
+   validate any future implementation before relying on it.
+3. VLB is for sells after a low break and continuation to a new lower low; VHB
+   is for buys after a high break and continuation to a new higher high. M5
+   structure confirmation is required. The high/low wording in the requested
+   Pine comments needs clarification before automatic detection can be defined.
+
+SYSTEM.JSON AND PRIVACY
+When downloaded in the full ZIP, system.json includes only aggregate statistics
+calculated locally from the current browser's uploaded journal; it does not
+contain individual trade records, screenshots or notes. If no journal is
+uploaded, statistics are unavailable. These calculations are descriptive,
+unverified journal data, not broker-verified performance or a tested strategy.
+The requested 17:00 NY best-hour claim and earlier 14:00-16:00 NY proposal
+conflict and are not verified by this app. The Pine comments contain user claims,
+not measured results. The R:R slider is hypothetical, not a backtest. Demo and
+Binance proxy prices are not live market execution.
