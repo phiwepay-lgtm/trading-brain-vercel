@@ -95,7 +95,7 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
       hooks.current.onCrosshair(timeframe, typeof param.time === 'number' ? param.time : null, price ?? 0);
     });
     api.timeScale().subscribeVisibleTimeRangeChange(range => { drawRef.current(); if (!skipSync.current && !suppressRange.current && range) hooks.current.onRange(timeframe, range); });
-    api.timeScale().subscribeVisibleLogicalRangeChange(range => { if (range && range.from < 40) hooks.current.onHistory(); drawRef.current(); });
+    api.timeScale().subscribeVisibleLogicalRangeChange(range => { if (range && range.from < 40 && !suppressRange.current) hooks.current.onHistory(); drawRef.current(); });
     const redraw = () => requestAnimationFrame(() => drawRef.current());
     const el = host.current; el.addEventListener('pointermove', redraw); el.addEventListener('wheel', redraw); const resize = new ResizeObserver(redraw); resize.observe(el);
     return () => { el.removeEventListener('pointermove', redraw); el.removeEventListener('wheel', redraw); resize.disconnect(); if (rangeTimer.current) clearTimeout(rangeTimer.current); chart.current = null; candles.current = null; line.current = null; overlayCandles.current = null; api.remove(); };
@@ -110,7 +110,16 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
     // Incremental updates preserve the viewport on each tick. A changed prefix requires a full reset.
     const incremental = prev && prev.ha === ha && prev.enabled === indicator && bars.length >= prev.bars.length && bars.length <= prev.bars.length + 1 && bars.length > 0 && prev.bars.length > 0 && bars[0] === prev.bars[0] && (prev.bars.length < 2 || bars[prev.bars.length - 2] === prev.bars[prev.bars.length - 2]);
     if (incremental) { c.update(display[display.length - 1] as any); if (indicator && values.length) l.update(values[values.length - 1] as any); }
-    else { c.setData(display as any); l.setData(indicator ? values as any : []); if ((!prev || !prev.bars.length) && bars.length) { const selected = focus ? bars.findIndex(b => b.time === Math.floor(focus.time / seconds) * seconds) : -1; api.timeScale().setVisibleLogicalRange(selected >= 0 ? {from: Math.max(0, selected - 60), to: Math.min(bars.length + 5, selected + 60)} : { from: Math.max(0, bars.length - 120), to: bars.length + 5 }); } }
+    else {
+      // Prepending history replaces the series. Keep the visible *time* range,
+      // not logical indices, and avoid syncing a transient range to the other pane.
+      const visible = prev?.bars.length ? api.timeScale().getVisibleRange() : null;
+      suppressRange.current = true; if (rangeTimer.current) clearTimeout(rangeTimer.current);
+      c.setData(display as any); l.setData(indicator ? values as any : []);
+      if (visible && bars.length) api.timeScale().setVisibleRange(visible);
+      else if ((!prev || !prev.bars.length) && bars.length) { const selected = focus ? bars.findIndex(b => b.time === Math.floor(focus.time / seconds) * seconds) : -1; api.timeScale().setVisibleLogicalRange(selected >= 0 ? {from: Math.max(0, selected - 60), to: Math.min(bars.length + 5, selected + 60)} : { from: Math.max(0, bars.length - 120), to: bars.length + 5 }); }
+      rangeTimer.current = setTimeout(() => { suppressRange.current = false; }, 150);
+    }
     previous.current = { bars, ha, enabled: indicator }; requestAnimationFrame(() => drawRef.current());
   }, [bars, display, ha, indicator, period]);
   useEffect(() => { draw(); }, [draw]);
