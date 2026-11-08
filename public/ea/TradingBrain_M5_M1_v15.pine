@@ -1,5 +1,5 @@
 //@version=5
-strategy("TradingBrain v15.1 - M5/M1 BT and FTB Draft", overlay=true, initial_capital=10000, commission_type=strategy.commission.percent, commission_value=0.02, pyramiding=0, calc_on_every_tick=false, process_orders_on_close=true)
+strategy("TradingBrain v15.3 - M5/M1 BT and FTB Draft", overlay=true, initial_capital=10000, commission_type=strategy.commission.percent, commission_value=0.02, pyramiding=0, calc_on_every_tick=false, process_orders_on_close=true)
 
 // STRUCTURAL STUDY ONLY. NOT fitted to the journal; no performance claims.
 // User-described Parts 1/2/3/4; exact visual pivots, session times and the
@@ -10,6 +10,7 @@ strategy("TradingBrain v15.1 - M5/M1 BT and FTB Draft", overlay=true, initial_ca
 // TradingView's broker emulator; actual execution is not guaranteed at close.
 Enable_Simulation = input.bool(false, "Enable structural simulation (OFF by default)")
 Sessions_Confirmed = input.bool(false, "I confirmed session times and timezones")
+Bypass_Session = input.bool(true, "BYPASS ALL SESSION FILTERS FOR TEST")
 NQ_Session = input.session("0930-1600", "New York session (proposed)")
 NQ_Timezone = input.string("America/New_York", "New York timezone (proposed IANA)")
 Asian_Session = input.session("0100-0600", "Asian session (proposed)")
@@ -35,7 +36,8 @@ isStandard = chart.is_standard
 // Both proposed session times and IANA timezones must be confirmed first.
 isNQ = isM1 and not na(time(timeframe.period, NQ_Session, NQ_Timezone))
 isAsian = isM1 and not na(time(timeframe.period, Asian_Session, Asian_Timezone))
-isGoldenSession = Enable_Simulation and Sessions_Confirmed and isM1 and isStandard and (isNQ or isAsian)
+inSession = Bypass_Session or (Sessions_Confirmed and (isNQ or isAsian))
+isGoldenSession = Enable_Simulation and isM1 and isStandard and inSession
 
 // PART 1, 3 and 4: both BT and FTB use completed Heikin Ashi M5 bars.
 // HA prices are synthetic and not executable. On M1, the completed M5 event
@@ -73,22 +75,16 @@ var float activeExpectedLow = na
 var int activeExpectedLowIndex = na
 if newHaM5
     // Update even outside trading sessions so a successful break is not missed.
-    // A newer opposite pivot replaces the old expectation; same-index ties
-    // leave both active and incompatible simultaneous signals remain suppressed.
-    if isNewHighPivot and (na(activeExpectedLowIndex) or expectedHighIndex >= activeExpectedLowIndex)
+    // Each side persists independently until a newer same-side pivot, break,
+    // or expiry. Incompatible simultaneous signals remain suppressed.
+    if isNewHighPivot
         activeExpectedHigh := expectedHigh
-        activeExpectedHighIndex := expectedHighIndex
-        if not na(activeExpectedLowIndex) and expectedHighIndex > activeExpectedLowIndex
-            activeExpectedLow := na
-            activeExpectedLowIndex := na
-    if isNewLowPivot and (na(activeExpectedHighIndex) or expectedLowIndex >= activeExpectedHighIndex)
+        activeExpectedHighIndex := haIndex
+    if isNewLowPivot
         activeExpectedLow := expectedLow
-        activeExpectedLowIndex := expectedLowIndex
-        if not na(activeExpectedHighIndex) and expectedLowIndex > activeExpectedHighIndex
-            activeExpectedHigh := na
-            activeExpectedHighIndex := na
+        activeExpectedLowIndex := haIndex
     // A close through the level is a successful break, not an FTB. Expire only
-    // after the configured number of M5 bars, measured from the pivot index.
+    // after the configured number of M5 bars, measured from observation.
     if not na(activeExpectedHighIndex) and (haIndex - activeExpectedHighIndex > M5_Lookback or haClose > activeExpectedHigh)
         activeExpectedHigh := na
         activeExpectedHighIndex := na
@@ -97,6 +93,17 @@ if newHaM5
         activeExpectedLowIndex := na
 expectingBullBOS = not na(activeExpectedHigh) and not na(activeExpectedHighIndex) and not na(haIndex) and haIndex - activeExpectedHighIndex <= M5_Lookback
 expectingBearBOS = not na(activeExpectedLow) and not na(activeExpectedLowIndex) and not na(haIndex) and haIndex - activeExpectedLowIndex <= M5_Lookback
+
+// Count distinct observed HA pivot updates, not the one-bar current flag.
+// Reset at the exchange's TradingView daily-bar boundary. A pivot already
+// available at the start of chart history can count as a first observation.
+var int m5PivotsToday = 0
+newExchangeDay = ta.change(time("D")) != 0
+if barstate.isconfirmed
+    if newExchangeDay
+        m5PivotsToday := 0
+    if newHaM5
+        m5PivotsToday += (isNewHighPivot ? 1 : 0) + (isNewLowPivot ? 1 : 0)
 
 // PART 2 + PART 3: M1 confirmed pivots approximate visual structure. For a bullish CHoCH,
 // the last confirmed high must be lower than the preceding confirmed high;
@@ -277,18 +284,19 @@ plotshape(bullChoch, title="Bullish CHoCH VHB candidate", text="VHB?", style=sha
 plotshape(bearChoch, title="Bearish CHoCH VLB candidate", text="VLB?", style=shape.labeldown, location=location.abovebar, color=color.maroon, textcolor=color.white, size=size.tiny)
 plotshape(buyEntry, title="Simulated buy confirmation", text="BUY?", style=shape.triangleup, location=location.belowbar, color=color.lime, textcolor=color.white, size=size.small)
 plotshape(sellEntry, title="Simulated sell confirmation", text="SELL?", style=shape.triangledown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
-var table panel = table.new(position.top_right, 2, 6, border_width=1)
+var table panel = table.new(position.top_right, 2, 7, border_width=1)
 if barstate.islast
     table.cell(panel, 0, 0, "STRUCTURE DRAFT", text_color=color.white, bgcolor=color.black)
-    table.cell(panel, 1, 0, not Enable_Simulation ? "OFF" : not isM1 or not isStandard ? "USE STANDARD M1" : not Sessions_Confirmed ? "CONFIRM SESSIONS" : "SIMULATION ONLY", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 0, not Enable_Simulation ? "OFF" : not isM1 or not isStandard ? "USE STANDARD M1" : not Bypass_Session and not Sessions_Confirmed ? "CONFIRM SESSIONS" : Bypass_Session ? "TEST BYPASS" : "SIMULATION ONLY", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 0, 1, "Session", text_color=color.white, bgcolor=color.black)
-    table.cell(panel, 1, 1, isGoldenSession ? "GOLDEN" : "NO TRADE", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 1, isGoldenSession ? (Bypass_Session ? "ALL HOURS (TEST)" : "GOLDEN") : "NO TRADE", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 0, 2, "State", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 1, 2, state, text_color=color.white, bgcolor=color.black)
     table.cell(panel, 0, 3, "Path / anchor", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 1, 3, setupType == "FTB" ? "FTB: REVIEW" : direction == -1 ? "BT BEAR: REVIEW" : direction == 1 ? "BT BULL: REVIEW" : "UNAVAILABLE", text_color=color.white, bgcolor=color.black)
-    // This requested display is a current-bar boolean, not a daily count.
     table.cell(panel, 0, 4, Debug_M5 ? "M5 Pivots Today" : "", text_color=color.white, bgcolor=color.black)
-    table.cell(panel, 1, 4, Debug_M5 ? str.tostring(isNewHighPivot or isNewLowPivot) : "", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 4, Debug_M5 ? str.tostring(m5PivotsToday) : "", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 0, 5, "Testing Edge", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 1, 5, Test_Mode, text_color=color.yellow, bgcolor=color.black)
+    table.cell(panel, 0, 6, Debug_M5 ? "HA Index / Active H-L" : "", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 6, Debug_M5 ? str.tostring(haIndex) + " / " + str.tostring(expectingBullBOS) + "-" + str.tostring(expectingBearBOS) : "", text_color=color.white, bgcolor=color.black)

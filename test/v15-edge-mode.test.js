@@ -13,7 +13,7 @@ test('v15 mode gates entry state, both orders and both bracket exits', () => {
   assert.match(pine, /if canConfirm and direction == 1 and bullEngulf[\s\S]*?buyEntry := true[\s\S]*?state := "ENTRY_SIGNAL"[\s\S]*?strategy\.entry\("Buy"[\s\S]*?strategy\.exit\("Buy bracket"/);
   assert.match(pine, /else if canConfirm and direction == -1 and bearEngulf[\s\S]*?sellEntry := true[\s\S]*?state := "ENTRY_SIGNAL"[\s\S]*?strategy\.entry\("Sell"[\s\S]*?strategy\.exit\("Sell bracket"/);
   assert.equal((pine.match(/strategy\.entry\(/g) || []).length, 2);
-  assert.match(pine, /table\.new\(position\.top_right, 2, 6,/);
+  assert.match(pine, /table\.new\(position\.top_right, 2, 7,/);
   assert.match(pine, /table\.cell\(panel, 0, 5, "Testing Edge", text_color=color\.white, bgcolor=color\.black\)/);
   assert.match(pine, /table\.cell\(panel, 1, 5, Test_Mode, text_color=color\.yellow, bgcolor=color\.black\)/);
   assert.match(pine, /Use_FTB = input\.bool\(true/);
