@@ -59,13 +59,14 @@ test('EA downloads, install guide and HOLD-only signal endpoint', async ({ page,
   await page.getByRole('link', { name: 'Download Instructions' }).click();
   expect((await readmeDownload).suggestedFilename()).toBe('README.txt');
   const source = await (await request.get('/ea/TradingBrain.mq5')).text();
-  expect(source).toContain('input bool EnableTrading = false');
-  expect(source).toContain('input bool DemoOnly = true');
-  expect(source).toContain('WebRequest(');
+  expect(source).toContain('input bool Enable_Visual_Scanner = false');
+  expect(source).toContain('input bool Use_M5_Filter = true');
+  expect(source).not.toContain('WebRequest(');
+  expect(source).not.toContain('OrderSend(');
   expect(await (await request.get('/api/signal')).json()).toMatchObject({ action: 'HOLD', confidence: null });
   await page.getByRole('link', { name: /OPEN THE FULL INSTALL GUIDE/ }).click();
   await expect(page).toHaveURL(/\/ea\/guide$/);
-  await expect(page.getByText('Allow the secure API URL')).toBeVisible();
+  await expect(page.getByText('Open a demo chart')).toBeVisible();
   await page.getByRole('link', { name: /BACK TO EA CENTER/ }).click();
   await expect(page).toHaveURL(/\/ea$/);
 });

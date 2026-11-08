@@ -18,7 +18,7 @@ test('download center exports matching source files and unavailable stats withou
   expect(await zip.file('TradingBrain_GOLD_M1_VLB_VHB.pine')!.async('string')).toBe(expectedPine);
   expect(await zip.file('TradingBrain.mq5')!.async('string')).toBe(await (await request.get('/ea/TradingBrain.mq5')).text());
   const json=JSON.parse(await zip.file('system.json')!.async('string'));expect(json.stats_source.status).toBe('not_uploaded');
-  const guide=await zip.file('README.txt')!.async('string');expect(guide).toContain('METATRADER 5');expect(guide).toContain('TRADINGVIEW');expect(guide).toContain('NOT implemented');
+  const guide=await zip.file('README.txt')!.async('string');expect(guide).toContain('METATRADER 5');expect(guide).toContain('TRADINGVIEW');expect(guide).toContain('not confirmed');
 });
 test('full ZIP calculates descriptive journal aggregates without exposing individual notes',async({page})=>{
   const trades=[{status:'Full TP',outcome:'win',pnl:20,realR:2,notes:'PRIVATE-TEST-NOTE'}, {status:'SL',outcome:'loss',pnl:-10,realR:-1}];

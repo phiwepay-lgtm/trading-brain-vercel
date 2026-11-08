@@ -1,138 +1,144 @@
-//+------------------------------------------------------------------+
-//| Trading Brain EA - sample integration, disabled by default        |
-//| Chart AI assessments are NOT signals. Test on demo before use.   |
-//+------------------------------------------------------------------+
+// Trading Brain M5/M1 visual scanner. NO order submission or network requests.
+// The VLB/VHB markers are engulfing-at-extreme candidates, NOT confirmed BOS,
+// CHoCH, pullback, continuation or verified BT/FTB patterns. Manual review only.
 #property strict
-#property version "1.00"
-#include <Trade/Trade.mqh>
+#property version "1.10"
 
-input double Lots = 0.1;
-input ulong Magic = 12345;
-input string API_URL = "https://trading-brain-vercel.vercel.app";
-input bool EnableTrading = false; // Explicit opt-in. Never enabled by install.
-input bool DemoOnly = true;       // Additional opt-in required for live accounts.
-input int MaxSpreadPoints = 30;
-input int PollSeconds = 15;
-input int MaxSignalLifetimeSeconds = 300;
+input bool Enable_Visual_Scanner = false; // OFF by default; visual annotations only
+input bool Use_M5_Filter = true;
+input int M5_Len = 50;
+input int M1_Len = 5;
+input int Zone_Points = 10; // arbitrary display half-width, not a stop or an FVG
+input int History_Bars = 500; // visual backfill, capped at 1000 M1 bars
 
-CTrade trade;
-uint last_poll = 0;
+string prefix;
+datetime lastM1=0;
+bool backfilled=false;
 
-// Read a unique flat JSON field. Nested/escaped/duplicate data is not supported:
-// an incompatible response is rejected rather than guessed.
-bool FieldStart(const string json,const string key,int &pos)
+void RemoveObjects() { ObjectsDeleteAll(0,prefix); }
+void DeleteZones() { ObjectDelete(0,prefix+"BT"); ObjectDelete(0,prefix+"FTB"); }
+
+// At the M1 bar's OPEN time, use the immediately preceding fully closed M5
+// candle and M5_Len bars ending there. Reject gaps and insufficient history.
+bool M5Levels(datetime m1Time,double &bt,double &ftb,int &bias,int &m5shift)
 {
-   string needle="\""+key+"\"";
-   int at=StringFind(json,needle);
-   if(at<0 || StringFind(json,needle,at+StringLen(needle))>=0) return false;
-   pos=at+StringLen(needle);
-   while(pos<StringLen(json) && StringGetCharacter(json,pos)<=32) pos++;
-   if(pos>=StringLen(json) || StringGetCharacter(json,pos)!=':') return false;
-   pos++;
-   while(pos<StringLen(json) && StringGetCharacter(json,pos)<=32) pos++;
-   return pos<StringLen(json);
-}
-bool FieldString(const string json,const string key,string &value)
-{
-   int pos;
-   if(!FieldStart(json,key,pos) || StringGetCharacter(json,pos)!='\"') return false;
-   int end=StringFind(json,"\"",pos+1);
-   if(end<0) return false;
-   value=StringSubstr(json,pos+1,end-pos-1);
-   if(StringFind(value,"\\")>=0) return false;
-   int next=end+1;
-   while(next<StringLen(json) && StringGetCharacter(json,next)<=32) next++;
-   return next<StringLen(json) && (StringGetCharacter(json,next)==',' || StringGetCharacter(json,next)=='}');
-}
-bool FieldNumber(const string json,const string key,double &value)
-{
-   int pos;
-   if(!FieldStart(json,key,pos)) return false;
-   int end=pos;
-   bool digit=false, decimal=false;
-   if(StringGetCharacter(json,end)=='-') end++;
-   while(end<StringLen(json))
+   m5shift=iBarShift(_Symbol,PERIOD_M5,m1Time,false);
+   if(m5shift<0) return false;
+   datetime bucket=iTime(_Symbol,PERIOD_M5,m5shift);
+   if(bucket<=0 || m1Time<bucket || m1Time>=bucket+300) return false;
+   int first=m5shift+1;
+   if(Bars(_Symbol,PERIOD_M5)<first+M5_Len) return false;
+   double hi=-DBL_MAX,lo=DBL_MAX;
+   for(int i=first;i<first+M5_Len;i++)
    {
-      ushort c=StringGetCharacter(json,end);
-      if(c>='0' && c<='9') { digit=true; end++; continue; }
-      if(c=='.' && !decimal) { decimal=true; end++; continue; }
-      break;
+      double h=iHigh(_Symbol,PERIOD_M5,i),l=iLow(_Symbol,PERIOD_M5,i);
+      if(h<=0 || l<=0 || h<l || iTime(_Symbol,PERIOD_M5,i)<=0) return false;
+      hi=MathMax(hi,h); lo=MathMin(lo,l);
    }
-   if(!digit) return false;
-   string text=StringSubstr(json,pos,end-pos);
-   while(end<StringLen(json) && StringGetCharacter(json,end)<=32) end++;
-   if(end>=StringLen(json) || (StringGetCharacter(json,end)!=',' && StringGetCharacter(json,end)!='}')) return false;
-   value=StringToDouble(text);
-   return MathIsValidNumber(value);
+   double c=iClose(_Symbol,PERIOD_M5,first);
+   if(c<=0 || hi<=lo) return false;
+   double range=hi-lo;
+   bt=hi-range*0.382; ftb=lo+range*0.382;
+   bias=c>bt ? -1 : c<ftb ? 1 : 0;
+   return true;
 }
 
-bool HasPositionForSymbol()
+bool Candidates(int shift,bool &vlb,bool &vhb)
 {
-   // Do not open on a symbol already occupied by this or another strategy.
-   for(int i=PositionsTotal()-1;i>=0;i--)
+   vlb=false; vhb=false;
+   if(Bars(_Symbol,PERIOD_M1)<shift+M1_Len+1) return false;
+   datetime time=iTime(_Symbol,PERIOD_M1,shift);
+   double o=iOpen(_Symbol,PERIOD_M1,shift),c=iClose(_Symbol,PERIOD_M1,shift);
+   double h=iHigh(_Symbol,PERIOD_M1,shift),l=iLow(_Symbol,PERIOD_M1,shift);
+   double po=iOpen(_Symbol,PERIOD_M1,shift+1),pc=iClose(_Symbol,PERIOD_M1,shift+1);
+   if(time<=0 || o<=0 || c<=0 || h<=0 || l<=0 || po<=0 || pc<=0) return false;
+   double previousHigh=-DBL_MAX,previousLow=DBL_MAX;
+   for(int i=1;i<=M1_Len;i++)
    {
-      ulong ticket=PositionGetTicket(i);
-      if(ticket>0 && PositionGetString(POSITION_SYMBOL)==_Symbol) return true;
+      datetime prior=iTime(_Symbol,PERIOD_M1,shift+i);
+      double ph=iHigh(_Symbol,PERIOD_M1,shift+i),pl=iLow(_Symbol,PERIOD_M1,shift+i);
+      if(prior<=0 || time-prior!=i*60 || ph<=0 || pl<=0 || ph<pl) return false;
+      previousHigh=MathMax(previousHigh,ph); previousLow=MathMin(previousLow,pl);
    }
-   return false;
-}
-bool ValidVolume(const double volume)
-{
-   double min=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
-   double max=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
-   double step=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
-   if(step<=0 || volume<min || volume>max) return false;
-   return MathAbs((volume-min)/step-MathRound((volume-min)/step))<0.000001;
+   vlb=c<o && pc>po && o>=pc && c<=po && h>=previousHigh;
+   vhb=c>o && pc<po && o<=pc && c>=po && l<=previousLow;
+   return true;
 }
 
+void Marker(datetime time,double price,bool sell)
+{
+   string name=prefix+(sell ? "VLB_" : "VHB_")+(string)time;
+   if(ObjectFind(0,name)<0 && ObjectCreate(0,name,OBJ_ARROW,0,time,price))
+   {
+      ObjectSetInteger(0,name,OBJPROP_ARROWCODE,sell ? 234 : 233);
+      ObjectSetInteger(0,name,OBJPROP_COLOR,sell ? clrRed : clrLimeGreen);
+      ObjectSetInteger(0,name,OBJPROP_WIDTH,2);
+      ObjectSetString(0,name,OBJPROP_TOOLTIP,sell ? "VLB? sell candidate - heuristic, not confirmed" : "VHB? buy candidate - heuristic, not confirmed");
+   }
+}
+void Zone(string name,datetime left,datetime right,double level,color shade)
+{
+   name=prefix+name;
+   double pad=Zone_Points*_Point;
+   if(ObjectFind(0,name)<0) ObjectCreate(0,name,OBJ_RECTANGLE,0,left,level+pad,right,level-pad);
+   else { ObjectMove(0,name,0,left,level+pad); ObjectMove(0,name,1,right,level-pad); }
+   ObjectSetInteger(0,name,OBJPROP_COLOR,shade);
+   ObjectSetInteger(0,name,OBJPROP_FILL,false); // outlined; MT5 object alpha varies by terminal
+   ObjectSetInteger(0,name,OBJPROP_BACK,true);
+   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
+}
+void ProcessBar(int shift)
+{
+   bool vlb,vhb;
+   if(!Candidates(shift,vlb,vhb)) return;
+   datetime t=iTime(_Symbol,PERIOD_M1,shift);
+   double bt=0,ftb=0; int bias=0,m5shift=0;
+   bool m5ok=M5Levels(t,bt,ftb,bias,m5shift);
+   if(vlb && (!Use_M5_Filter || (m5ok && bias==-1))) Marker(t,iHigh(_Symbol,PERIOD_M1,shift)+5*_Point,true);
+   if(vhb && (!Use_M5_Filter || (m5ok && bias==1))) Marker(t,iLow(_Symbol,PERIOD_M1,shift)-5*_Point,false);
+}
+int OnInit()
+{
+   prefix="TradingBrain_MTF_"+(string)ChartID()+"_";
+   if(M5_Len<2 || M5_Len>1000 || M1_Len<1 || M1_Len>100 || Zone_Points<1 || Zone_Points>1000 || History_Bars<0 || History_Bars>1000) return INIT_PARAMETERS_INCORRECT;
+   return INIT_SUCCEEDED;
+}
+void OnDeinit(const int reason) { RemoveObjects(); Comment(""); }
 void OnTick()
 {
-   uint now=GetTickCount();
-   uint interval=(uint)MathMax(PollSeconds,5)*1000;
-   if(last_poll!=0 && (uint)(now-last_poll)<interval) return;
-   last_poll=now;
-   if(StringFind(API_URL,"https://")!=0) { Print("Trading Brain: HTTPS API_URL required."); return; }
-   string url=API_URL;
-   if(StringSubstr(url,StringLen(url)-1)=="/") url=StringSubstr(url,0,StringLen(url)-1);
-   url+="/api/signal";
-   char post[],response[];
-   string response_headers;
-   ResetLastError();
-   int http=WebRequest("GET",url,"Accept: application/json\r\n",5000,post,response,response_headers);
-   if(http==-1) { PrintFormat("Trading Brain WebRequest failed (%d). Allow API_URL in MT5 options.",GetLastError()); return; }
-   string body=CharArrayToString(response,0,WHOLE_ARRAY,CP_UTF8);
-   PrintFormat("Trading Brain HTTP %d response: %s",http,body);
-   if(http!=200 || StringLen(body)>8192) return;
-   string action,symbol;
-   if(!FieldString(body,"action",action) || (action!="BUY" && action!="SELL")) return;
-   if(!EnableTrading) { Print("Trading Brain: signal ignored; EnableTrading is false."); return; }
-   if(DemoOnly && AccountInfoInteger(ACCOUNT_TRADE_MODE)!=ACCOUNT_TRADE_MODE_DEMO) { Print("Trading Brain: demo accounts only."); return; }
-   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED) || !AccountInfoInteger(ACCOUNT_TRADE_ALLOWED)) { Print("Trading Brain: automated trading not allowed."); return; }
-   double confidence,sl,tp,signal_id,expires_at;
-   if(!FieldString(body,"symbol",symbol) || symbol!=_Symbol || !FieldNumber(body,"confidence",confidence) || confidence<=70 || confidence>100 ||
-      !FieldNumber(body,"sl",sl) || !FieldNumber(body,"tp",tp) || !FieldNumber(body,"signal_id",signal_id) || !FieldNumber(body,"expires_at",expires_at)) { Print("Trading Brain: incomplete or invalid signal."); return; }
-   // Only positive integer IDs in exact-double range. Signal IDs must be unique per symbol.
-   if(signal_id<1 || signal_id>9007199254740991.0 || MathFloor(signal_id)!=signal_id) return;
-   datetime now_utc=TimeGMT();
-   if(expires_at<=now_utc || expires_at>now_utc+MathMax(1,MaxSignalLifetimeSeconds)) { Print("Trading Brain: expired or invalid signal lifetime."); return; }
-   string dedup=StringFormat("TB.%I64d.%s.%I64u",AccountInfoInteger(ACCOUNT_LOGIN),_Symbol,Magic);
-   if(GlobalVariableCheck(dedup) && GlobalVariableGet(dedup)>=signal_id) { Print("Trading Brain: signal is old or already processed."); return; }
-   if(HasPositionForSymbol()) { Print("Trading Brain: symbol already has an open position."); return; }
-   MqlTick tick;
-   if(!SymbolInfoTick(_Symbol,tick) || tick.ask<=0 || tick.bid<=0 || _Point<=0) return;
-   if(MaxSpreadPoints<0 || (tick.ask-tick.bid)/_Point>MaxSpreadPoints) { Print("Trading Brain: spread exceeds limit."); return; }
-   if(!ValidVolume(Lots)) { Print("Trading Brain: invalid lot size for symbol."); return; }
-   double min_stop=(double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL)*_Point;
-   if(sl<=0 || tp<=0 || (action=="BUY" && (sl>=tick.bid-min_stop || tp<=tick.bid+min_stop)) ||
-      (action=="SELL" && (sl<=tick.ask+min_stop || tp>=tick.ask-min_stop))) { Print("Trading Brain: invalid stop/target for current market."); return; }
-   trade.SetExpertMagicNumber(Magic);
-   trade.SetTypeFillingBySymbol(_Symbol);
-   bool submitted=(action=="BUY") ? trade.Buy(Lots,_Symbol,0,NormalizeDouble(sl,_Digits),NormalizeDouble(tp,_Digits),"Trading Brain") : trade.Sell(Lots,_Symbol,0,NormalizeDouble(sl,_Digits),NormalizeDouble(tp,_Digits),"Trading Brain");
-   uint code=trade.ResultRetcode();
-   PrintFormat("Trading Brain order: submitted=%s retcode=%u %s",submitted ? "true" : "false",code,trade.ResultRetcodeDescription());
-   if(submitted && (code==TRADE_RETCODE_DONE || code==TRADE_RETCODE_DONE_PARTIAL || code==TRADE_RETCODE_PLACED))
+   if(!Enable_Visual_Scanner || Period()!=PERIOD_M1)
    {
-      GlobalVariableSet(dedup,signal_id);
-      GlobalVariablesFlush();
+      RemoveObjects(); backfilled=false; lastM1=0;
+      Comment("Trading Brain: HOLD / visual scanner ",Enable_Visual_Scanner ? "requires M1 chart" : "disabled", ". No orders.");
+      return;
    }
+   datetime current=iTime(_Symbol,PERIOD_M1,0),closed=iTime(_Symbol,PERIOD_M1,1);
+   if(current<=0 || closed<=0) { DeleteZones(); Comment("Trading Brain: HOLD - M1 data unavailable."); return; }
+   if(current==lastM1) return;
+   double bt=0,ftb=0;int bias=0,m5shift=0;
+   // The last closed M1 bar determines both candidate and aligned M5 value.
+   bool m5ok=M5Levels(closed,bt,ftb,bias,m5shift),vlb=false,vhb=false;
+   bool m1ok=Candidates(1,vlb,vhb);
+   if(!m1ok || (!m5ok && Use_M5_Filter)) { DeleteZones(); Comment("Trading Brain: HOLD - waiting for complete M1/M5 history."); return; }
+   if(!backfilled)
+   {
+      int count=MathMin(History_Bars,Bars(_Symbol,PERIOD_M1)-M1_Len-1);
+      for(int i=count;i>=1;i--) ProcessBar(i);
+      if(count<1) ProcessBar(1); // History_Bars=0 still evaluates the latest closed bar.
+      backfilled=true;
+   }
+   else ProcessBar(1);
+   lastM1=current;
+   if(m5ok)
+   {
+      datetime left=iTime(_Symbol,PERIOD_M5,m5shift+M5_Len);
+      Zone("BT",left,current,bt,clrFireBrick); Zone("FTB",left,current,ftb,clrSeaGreen);
+   }
+   else DeleteZones();
+   string state=m5ok ? (bias<0 ? "BEARISH / BT proxy" : bias>0 ? "BULLISH / FTB proxy" : "NEUTRAL") : "UNAVAILABLE";
+   bool sell=vlb && (!Use_M5_Filter || (m5ok && bias<0));
+   bool buy=vhb && (!Use_M5_Filter || (m5ok && bias>0));
+   string marker=sell ? "VLB? SELL candidate" : buy ? "VHB? BUY candidate" : "HOLD";
+   Comment("Trading Brain - visual only, no orders\nM5: ",state,"\nM1: ",marker,"\nM5 filter: ",Use_M5_Filter ? "ON" : "OFF", "\nEngulfing proxy; manual validation required.");
+   ChartRedraw();
 }
