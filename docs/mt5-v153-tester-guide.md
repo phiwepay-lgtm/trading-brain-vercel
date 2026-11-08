@@ -29,7 +29,7 @@ All six presets leave `Enable_Simulation=false` and `Enable_StrategyTester_Order
 2. Choose **Every tick based on real ticks**, a date range your broker actually supplies, and the intended tester deposit, account currency, leverage, execution mode and costs. Real-tick testing can take considerable time and disk space. In MT5, missing or inconsistent tick history can result in generated ticks; inspect the tester Journal and the available data rather than assuming every tick is real. See [MetaTrader Strategy Testing](https://www.metatrader5.com/en/terminal/help/algotrading/testing) and [how the tester downloads data](https://www.metatrader5.com/en/terminal/help/algotrading/test_preparation).
 3. In **Inputs → Load**, choose one of the matching v15.3 `.set` files and verify the `Test_Mode` value (0 = Both, 1 = FTB only, 2 = BT only). The presets are intentionally inert: for simulated Strategy Tester trades, explicitly set **both** `Enable_Simulation=true` and `Enable_StrategyTester_Orders=true` inside the tester. Orders are still blocked outside the tester. Review the broker's minimum lot, volume step, stops and `Order_Quantity` (MT5 lots, not Pine quantity units). No particular lot size is recommended.
 4. `Bypass_Session=true` tests all available hours and does not require clock confirmation. For session-restricted tests set it false and explicitly confirm **both** the proposed sessions and `Broker_UTC_Offset_Minutes` for the entire historical period. The offset is fixed; broker DST or historical changes can make a long run invalid. The proposed windows are NY 09:30–16:00 and UTC 01:00–06:00, not verified trading rules.
-5. Run a **short visual test first**. FTB levels are magenta, BT fib orange, and M1 CHoCH aqua. Markers are candidates or accepted tester orders, not verified fills. Inspect the Strategy Tester Journal for errors, insufficient-history counts, rejected-order retcodes and the final `TB v15.3 diagnostics` line. Its BT/FTB/CHoCH/entry counts are diagnostic events, not closed-trade totals or performance.
+5. Run a **short visual test first**. FTB levels are magenta, BT fib orange, and M1 CHoCH aqua. Arrows are entry confirmations; white and yellow deal markers are simulated fills, subject to platform verification. Inspect the Strategy Tester Journal for errors, insufficient-history counts, rejected-order retcodes and the final `TB v15.3 diagnostics` line. Its BT/FTB/CHoCH/entry counts are diagnostic events, not closed-trade totals or performance.
 6. After the short run works, extend the requested dates in stages to the **oldest broker history available**, checking actual first/last processed times and gaps. Data coverage is broker- and symbol-dependent; this package cannot download or guarantee history on your behalf. The EA requests up to `HA_History_Bars=5000` prior M5 bars per M5 update for HA initialization; this is a rolling seed window, **not a cap on the tester date range**. Longer windows and real ticks can be slow. MT5 may adjust the usable test start to load warm-up data; check the report and Journal.
 7. Save the tester's **Results / Report** and relevant Journal output locally. Record broker/server, exact symbol, date range, M1, test mode, tick model and coverage, deposit/currency/leverage, commission/spread/swap, execution settings, all EA inputs, and the terminal build. Before sharing, remove account numbers and other personal details. Results remain simulated and do not prove profitability.
 
@@ -55,8 +55,38 @@ The supplied `.set` files contain inputs only; they are not `.tpl` charts. On yo
 
 ## Important differences and limits
 
-- This port is a draft. Its HA seed window, M5/M1 pivot tie handling, data gaps, startup/restart state, symbol specifications and fixed broker-offset implementation can diverge from Pine. Its bearish BT path now mirrors the bullish path; the current Pine v15.3 retains an additional bearish structure filter and different fib anchor, so their bearish BT signals are **not equivalent**. The port does not reconstruct every setup before the test starts. Compare bar-by-bar events before interpreting the results as equivalent.
+- This port is a draft. Its HA seed window, M5/M1 pivot tie handling, data gaps, startup/restart state, symbol specifications and fixed broker-offset implementation can diverge from Pine. Its bearish BT path now mirrors the bullish path; the legacy Pine v15.3 retains an additional bearish structure filter and different fib anchor, so their bearish BT signals are **not equivalent**. The separate selected mirrored Pine drafts use the mirrored anchors too, but parity remains unverified. The port does not reconstruct every setup before the test starts. Compare bar-by-bar events before interpreting the results as equivalent.
 - MT5 orders are submitted on the first available tick after the signal M1 bar closes. TradingView's `process_orders_on_close` is a different broker-emulator setting; spread, tick size, lot units, commissions, rejected orders and fills can differ. The RR target uses the signal close to stop distance rather than actual fill-to-stop distance, so slippage and spread can change the realised risk/reward. Tester report history is not verified journal performance.
 - FTB requires a synthetic HA wick to touch and penetrate no more than 30 broker trade ticks by default; a near miss is rejected. HA prices are synthetic, so this does not prove the executable market touched the level. FTB bypasses BT's 0.382 filter. Standard M1 OHLC is used for CHoCH and engulfing.
 - The EA needs at least `M5_Lookback + M5_Left + M5_Right + 4` loaded closed M5 bars before processing M5 signals. It fetches up to 2,000 closed M1 bars per processed bar for M1 pivots. Insufficient-history counters count failed processing **attempts**, not the number of missing bars. Reported M5 copy-window min/max are fetched bar counts, not a data-quality score. If completed M5 bars are skipped, a diagnostic gap event is counted and existing expectations are cleared rather than guessing what happened in the missing interval; those events are not replayed.
 - Outputs and data stay in your MT5 environment; there is no upload to this website. Do not put raw journal records, account credentials, or private broker reports into the repository.
+
+## Historical markers and run totals (unverified draft)
+
+In a **visual** Strategy Tester run, the EA attempts to show entry-confirmation
+arrows, white entry-deal dots and yellow exit-deal crosses at the simulated deal
+price. Deals may be partial; the confirmation is not a fill, and exit markers
+are not necessarily a fully closed position. Scroll the tester chart through
+bars processed in that run. Existing candidate and level markers remain
+research-only. The draft leaves visual objects and the final panel on the tester
+chart after the run while that chart remains open; the next run clears its old
+markers. MT5 may close or reset the chart, so this is not an export or durable
+history. Save the native Results/Report and Journal locally for later review.
+
+The chart panel counts entry confirmations, accepted requests, and distinct
+filled, closed and open position IDs observed during the current run. Filled
+means at least one entry deal, closed requires all observed entry volume to be
+exited; partial exit deals alone do not count as closed. History lookup failures,
+reversals, close-by and mixed-magic entries make position totals unavailable in
+the panel. The final Journal line contains diagnostic numbers and a reliability
+flag; do not use its position numbers if that flag is false. Reconcile against
+MT5's native Strategy Tester Results/Report, especially for broker execution,
+position netting, incomplete data, restarts and unusual events. Counters start
+from this run, not the broker's entire history. The native report is the source
+for individual orders, deals and realized results.
+
+These additions do not change entry or exit rules or lift the tester-only
+restriction. They have not been compiled or exercised in MT5. Test a short
+visual run first, verify the markers and counts against Results, and inspect the
+Journal before extending the range. History, drawing and transaction limits may
+restrict very long runs.
