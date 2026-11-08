@@ -1,0 +1,396 @@
+//@version=5
+indicator("TradingBrain Pro V1 - Indicator Research Draft", overlay=true)
+
+// STRUCTURAL STUDY ONLY. NOT fitted to the journal; no performance claims.
+// User-described Parts 1/2/3/4; exact visual pivots, session times and the
+// selected mirrored bearish BT anchors remain provisional. Not verified
+// VLB/VHB. Alerts are optional candidate notices, not executions or a relay.
+// Use standard M1 candles only. Do not use Heikin Ashi or other synthetic charts.
+// Independent virtual positions allow overlapping signals. OHLC exits are
+// not broker fills. The indicator cannot place orders.
+Enable_Simulation = input.bool(true, "Enable structural simulation (visual research only)")
+Sessions_Confirmed = input.bool(false, "I confirmed session times and timezones")
+Bypass_Session = input.bool(true, "BYPASS ALL SESSION FILTERS FOR TEST")
+NQ_Session = input.session("0930-1600", "New York session (proposed)")
+NQ_Timezone = input.string("America/New_York", "New York timezone (proposed IANA)")
+Asian_Session = input.session("0100-0600", "Asian session (proposed)")
+Asian_Timezone = input.string("Etc/UTC", "Asian timezone (proposed IANA)")
+M5_Lookback = input.int(200, "Maximum M5 pivot age (bars; provisional)", minval=2, maxval=1000)
+M5_Left = input.int(2, "M5 pivot left bars (provisional)", minval=1, maxval=50)
+M5_Right = input.int(2, "M5 pivot right bars (provisional)", minval=1, maxval=50)
+M1_Left = input.int(2, "M1 pivot left bars (provisional)", minval=1, maxval=50)
+M1_Right = input.int(2, "M1 pivot right bars (provisional)", minval=1, maxval=50)
+RR_Ratio = input.float(2.5, "Simulated reward/risk (e.g. 2, 5, 7)", minval=0.1, maxval=100, step=0.1)
+Stop_Buffer_Ticks = input.int(10, "Engulfing-candle stop buffer (ticks)", minval=0, maxval=1000)
+Engulf_Multiplier = input.float(1.2, "Engulf body size multiplier", minval=1.0, maxval=10.0, step=0.1)
+Use_FTB = input.bool(true, "Use experimental FTB path")
+Test_Mode = input.string("Both", "Test Edge Mode", options=["Both", "FTB Only (my edge)", "BT Only (common)"])
+Require_HA_Color_Shift = input.bool(true, "Require preceding opposite HA colour for FTB")
+Debug_M5 = input.bool(true, "Show M5 HA debug")
+
+isM1 = timeframe.isminutes and timeframe.multiplier == 1
+isStandard = chart.is_standard
+// Sessions use the M1 bar OPEN and TradingView's default session weekdays.
+// Both proposed session times and IANA timezones must be confirmed first.
+isNQ = isM1 and not na(time(timeframe.period, NQ_Session, NQ_Timezone))
+isAsian = isM1 and not na(time(timeframe.period, Asian_Session, Asian_Timezone))
+inSession = Bypass_Session or (Sessions_Confirmed and (isNQ or isAsian))
+isGoldenSession = Enable_Simulation and isM1 and isStandard and inSession
+
+// PART 1, 3 and 4: both BT and FTB use completed Heikin Ashi M5 bars.
+// HA prices are synthetic and not executable. On M1, the completed M5 event
+// is processed at the close of the first M1 candle in the next M5 interval.
+// Confirmed pivots have right-hand lag; age limits are provisional testing settings.
+f_completedHA() =>
+    ph = ta.pivothigh(high, M5_Left, M5_Right)
+    pl = ta.pivotlow(low, M5_Left, M5_Right)
+    swingHigh = ta.valuewhen(not na(ph), ph, 0)
+    swingLow = ta.valuewhen(not na(pl), pl, 0)
+    prevHigh = ta.valuewhen(not na(ph), ph, 1)
+    prevLow = ta.valuewhen(not na(pl), pl, 1)
+    highIndex = ta.valuewhen(not na(ph), bar_index - M5_Right, 0)
+    lowIndex = ta.valuewhen(not na(pl), bar_index - M5_Right, 0)
+    prevHighIndex = ta.valuewhen(not na(ph), bar_index - M5_Right, 1)
+    prevLowIndex = ta.valuewhen(not na(pl), bar_index - M5_Right, 1)
+    // [2] expectations were already confirmed before the signal candle began.
+    [time[1], bar_index[1], open[1], high[1], low[1], close[1], open[2], close[2], swingHigh[1], swingLow[1], prevHigh[1], prevLow[1], highIndex[1], lowIndex[1], prevHighIndex[1], prevLowIndex[1], swingHigh[2], swingLow[2], prevHigh[2], prevLow[2], highIndex[2], lowIndex[2]]
+haTicker = ticker.heikinashi(syminfo.tickerid)
+[haTime, haIndex, haOpen, haHigh, haLow, haClose, haPriorOpen, haPriorClose, haSwingHigh, haSwingLow, haPrevHigh, haPrevLow, haHighIndex, haLowIndex, haPrevHighIndex, haPrevLowIndex, expectedHigh, expectedLow, expectedPrevHigh, expectedPrevLow, expectedHighIndex, expectedLowIndex] = request.security(haTicker, "5", f_completedHA(), lookahead=barmerge.lookahead_on)
+newHaM5 = isM1 and barstate.isconfirmed and not na(haTime) and (na(haTime[1]) or haTime != haTime[1])
+validHaLow = not na(haSwingLow) and not na(haLowIndex) and not na(haIndex) and haIndex - haLowIndex <= M5_Lookback * 2
+validHaHigh = not na(haSwingHigh) and not na(haHighIndex) and not na(haIndex) and haIndex - haHighIndex <= M5_Lookback * 2
+validHaPrevLow = not na(haPrevLow) and not na(haPrevLowIndex) and not na(haIndex) and haIndex - haPrevLowIndex <= M5_Lookback
+validHaPrevHigh = not na(haPrevHigh) and not na(haPrevHighIndex) and not na(haIndex) and haIndex - haPrevHighIndex <= M5_Lookback
+// Mirrored BT: a bearish break uses the latest confirmed HA low.
+// PART 4 FTB: persist confirmed HA pivots across later M5 attempts. [2] data
+// was available before the completed signal candle; never use its new pivots.
+isNewHighPivot = not na(expectedHigh) and not na(expectedHighIndex) and (na(expectedHighIndex[1]) or expectedHighIndex != expectedHighIndex[1])
+isNewLowPivot = not na(expectedLow) and not na(expectedLowIndex) and (na(expectedLowIndex[1]) or expectedLowIndex != expectedLowIndex[1])
+var float activeExpectedHigh = na
+var int activeExpectedHighIndex = na
+var float activeExpectedLow = na
+var int activeExpectedLowIndex = na
+if newHaM5
+    // Update even outside trading sessions so a successful break is not missed.
+    // Each side persists independently until a newer same-side pivot, break,
+    // or expiry. Incompatible simultaneous signals remain suppressed.
+    if isNewHighPivot
+        activeExpectedHigh := expectedHigh
+        activeExpectedHighIndex := haIndex
+    if isNewLowPivot
+        activeExpectedLow := expectedLow
+        activeExpectedLowIndex := haIndex
+    // A close through the level is a successful break, not an FTB. Expire only
+    // after the configured number of M5 bars, measured from observation.
+    if not na(activeExpectedHighIndex) and (haIndex - activeExpectedHighIndex > M5_Lookback or haClose > activeExpectedHigh)
+        activeExpectedHigh := na
+        activeExpectedHighIndex := na
+    if not na(activeExpectedLowIndex) and (haIndex - activeExpectedLowIndex > M5_Lookback or haClose < activeExpectedLow)
+        activeExpectedLow := na
+        activeExpectedLowIndex := na
+expectingBullBOS = not na(activeExpectedHigh) and not na(activeExpectedHighIndex) and not na(haIndex) and haIndex - activeExpectedHighIndex <= M5_Lookback
+expectingBearBOS = not na(activeExpectedLow) and not na(activeExpectedLowIndex) and not na(haIndex) and haIndex - activeExpectedLowIndex <= M5_Lookback
+
+// Count distinct observed HA pivot updates, not the one-bar current flag.
+// Reset at the exchange's TradingView daily-bar boundary. A pivot already
+// available at the start of chart history can count as a first observation.
+var int m5PivotsToday = 0
+newExchangeDay = ta.change(time("D")) != 0
+if barstate.isconfirmed
+    if newExchangeDay
+        m5PivotsToday := 0
+    if newHaM5
+        m5PivotsToday += (isNewHighPivot ? 1 : 0) + (isNewLowPivot ? 1 : 0)
+
+// PART 2 + PART 3: M1 confirmed pivots approximate visual structure. For a bullish CHoCH,
+// the last confirmed high must be lower than the preceding confirmed high;
+// for a bearish CHoCH the last confirmed low must be higher than the preceding
+// confirmed low. No five-bar extreme or generic extreme-at-engulf rule is used.
+m1PH = ta.pivothigh(high, M1_Left, M1_Right)
+m1PL = ta.pivotlow(low, M1_Left, M1_Right)
+lastM1High = ta.valuewhen(not na(m1PH), m1PH, 0)
+previousM1High = ta.valuewhen(not na(m1PH), m1PH, 1)
+lastM1Low = ta.valuewhen(not na(m1PL), m1PL, 0)
+previousM1Low = ta.valuewhen(not na(m1PL), m1PL, 1)
+hasLowerHigh = not na(lastM1High) and not na(previousM1High) and lastM1High < previousM1High
+hasHigherLow = not na(lastM1Low) and not na(previousM1Low) and lastM1Low > previousM1Low
+
+// The state machine resets outside a confirmed golden session. Open simulated
+// virtual positions retain their bracket levels even when the session ends.
+// M5 BOS outside the session is NOT carried into the next session in this draft.
+var string state = "NO_SESSION"
+var int direction = 0
+var int usedHighPivot = na
+var int usedLowPivot = na
+var string setupType = "NONE"
+allowBT = Test_Mode == "Both" or Test_Mode == "BT Only (common)"
+allowFTB = Test_Mode == "Both" or Test_Mode == "FTB Only (my edge)"
+var float ftbLevel = na
+var float bosLegLow = na
+var float bosLegHigh = na
+var float prevHigherLow = na
+var float newLowerLow = na
+var float fib0382 = na
+var int bosBar = na
+var int reactionBar = na
+var int chochBar = na
+var float chochLevel = na
+var int entryBar = na
+// Independent virtual brackets: no suppression when another trade is open.
+// Missing minutes and same-bar double touches are censored; no invented result.
+var int[] vDirections = array.new_int()
+var int[] vEntryBars = array.new_int()
+var float[] vStops = array.new_float()
+var float[] vTargets = array.new_float()
+var int vClosed = 0
+var int vCensored = 0
+var int vAmbiguous = 0
+bool vExitStop = false
+bool vExitTarget = false
+bool vExitUnknown = false
+if barstate.isconfirmed and array.size(vDirections) > 0
+    missingMinute = not na(time[1]) and time - time[1] != 60000
+    if missingMinute
+        vCensored += array.size(vDirections)
+        vExitUnknown := true
+        array.clear(vDirections)
+        array.clear(vEntryBars)
+        array.clear(vStops)
+        array.clear(vTargets)
+    else
+        for i = array.size(vDirections) - 1 to 0
+            vDir = array.get(vDirections, i)
+            vStop = array.get(vStops, i)
+            vTarget = array.get(vTargets, i)
+            if bar_index > array.get(vEntryBars, i)
+                // Opening beyond one bracket resolves that side before using range.
+                openStop = vDir == 1 ? open <= vStop : open >= vStop
+                openTarget = vDir == 1 ? open >= vTarget : open <= vTarget
+                stopHit = vDir == 1 ? low <= vStop : high >= vStop
+                targetHit = vDir == 1 ? high >= vTarget : low <= vTarget
+                both = not openStop and not openTarget and stopHit and targetHit
+                if openStop or openTarget or stopHit or targetHit
+                    if both
+                        vCensored += 1
+                        vAmbiguous += 1
+                        vExitUnknown := true
+                    else
+                        vClosed += 1
+                        vExitStop := vExitStop or openStop or (not openTarget and stopHit)
+                        vExitTarget := vExitTarget or openTarget or (not openStop and targetHit)
+                    array.remove(vDirections, i)
+                    array.remove(vEntryBars, i)
+                    array.remove(vStops, i)
+                    array.remove(vTargets, i)
+bullBos = isGoldenSession and newHaM5 and validHaHigh and haClose > haSwingHigh and (na(usedHighPivot) or haHighIndex != usedHighPivot)
+bearBos = isGoldenSession and newHaM5 and validHaLow and haClose < haSwingLow and (na(usedLowPivot) or haLowIndex != usedLowPivot)
+// FTB requires an actual HA wick touch plus the specified 30-tick bound.
+// The bound alone would allow a near miss, so the exact-touch check is explicit.
+// By default the preceding HA candle must be opposite-coloured.
+ftbTolerance = 30 * syminfo.mintick
+failedHigh = isGoldenSession and Use_FTB and newHaM5 and expectingBullBOS and haHigh >= activeExpectedHigh - ftbTolerance and haHigh <= activeExpectedHigh + ftbTolerance and haHigh >= activeExpectedHigh and haClose < activeExpectedHigh and haClose < haOpen and (not Require_HA_Color_Shift or haPriorClose > haPriorOpen)
+failedLow = isGoldenSession and Use_FTB and newHaM5 and expectingBearBOS and haLow <= activeExpectedLow + ftbTolerance and haLow >= activeExpectedLow - ftbTolerance and haLow <= activeExpectedLow and haClose > activeExpectedLow and haClose > haOpen and (not Require_HA_Color_Shift or haPriorClose < haPriorOpen)
+
+// PART 1 / 2 / 3 / 4: ordered state machine. One event of each type per M1 bar, used for markers. State updates only on
+// confirmed bars. Same-bar reaction/CHoCH/entry are deliberately disallowed:
+// OHLC bars do not reveal the intrabar sequence.
+bool bullChoch = false
+bool bearChoch = false
+bool buyEntry = false
+bool sellEntry = false
+bool markFtbHigh = false
+bool markFtbLow = false
+// Funnel counts are diagnostic events over the loaded history, not trades.
+var int btRawCount = 0
+var int ftbRawCount = 0
+var int reactionCount = 0
+var int chochCount = 0
+var int enabledBars = 0
+if barstate.isconfirmed and isGoldenSession
+    enabledBars += 1
+    btRawCount += (bullBos ? 1 : 0) + (bearBos ? 1 : 0)
+    ftbRawCount += (failedHigh ? 1 : 0) + (failedLow ? 1 : 0)
+if barstate.isconfirmed
+    if not isGoldenSession
+        state := "NO_SESSION"
+        setupType := "NONE"
+        ftbLevel := na
+        direction := 0
+        bosLegLow := na
+        bosLegHigh := na
+        prevHigherLow := na
+        newLowerLow := na
+        fib0382 := na
+        chochLevel := na
+        bosBar := na
+        reactionBar := na
+        chochBar := na
+    else
+        if state == "NO_SESSION" or state == "ENTRY_SIGNAL"
+            state := "EXPECTING_BOS"
+        if bullBos or bearBos or failedHigh or failedLow
+            if bullBos
+                usedHighPivot := haHighIndex
+            if bearBos
+                usedLowPivot := haLowIndex
+            // A bar indicating multiple incompatible events is not tradable.
+            eventCount = (bullBos ? 1 : 0) + (bearBos ? 1 : 0) + (failedHigh ? 1 : 0) + (failedLow ? 1 : 0)
+            ambiguous = eventCount != 1
+            direction := ambiguous ? 0 : bullBos or failedLow ? 1 : -1
+            setupType := ambiguous ? "NONE" : bullBos or bearBos ? "BT" : "FTB"
+            ftbLevel := setupType == "FTB" ? (failedHigh ? activeExpectedHigh : activeExpectedLow) : na
+            markFtbHigh := not ambiguous and failedHigh
+            markFtbLow := not ambiguous and failedLow
+            // Selected mirrored BT: bullish signal high / latest HA low;
+            // bearish signal low / latest HA high. Not journal-verified.
+            prevHigherLow := na
+            newLowerLow := direction == -1 and setupType == "BT" ? haLow : na
+            bosLegLow := setupType == "BT" ? (direction == 1 ? (validHaLow ? haSwingLow : na) : newLowerLow) : na
+            bosLegHigh := setupType == "BT" ? (direction == 1 ? haHigh : (validHaHigh ? haSwingHigh : na)) : na
+            anchorsValid = setupType == "BT" and direction != 0 and not na(bosLegLow) and not na(bosLegHigh) and bosLegHigh > bosLegLow
+            legRange = anchorsValid ? bosLegHigh - bosLegLow : na
+            fib0382 := anchorsValid ? (direction == 1 ? bosLegHigh - legRange * 0.382 : bosLegLow + legRange * 0.382) : na
+            // FTB is a reversal and does not require an invented 0.382 level.
+            state := ambiguous ? "AMBIGUOUS" : setupType == "FTB" ? "FTB_FOUND" : anchorsValid ? "BT_FOUND" : "WAITING_ANCHORS"
+            bosBar := bar_index
+            reactionBar := setupType == "FTB" ? bar_index : na
+            chochBar := na
+            chochLevel := na
+        else
+            if state == "FTB_FOUND" and bar_index > bosBar
+                state := "WAITING_CHOCH"
+            if state == "BT_FOUND" and bar_index > bosBar
+                state := "WAITING_0382"
+            // Reaction means the completed M1 candle's range touches the exact
+            // candidate level. No tolerance or intrabar ordering is inferred.
+            if state == "WAITING_0382" and bar_index > bosBar and low <= fib0382 and high >= fib0382
+                state := "WAITING_CHOCH"
+                reactionBar := bar_index
+                reactionCount += 1
+            // Break must occur AFTER the reaction candle, confirmed by a close
+            // across the then-current confirmed M1 pivot. Bull is VHB, bear VLB.
+            if state == "WAITING_CHOCH" and bar_index > reactionBar and direction == 1 and hasLowerHigh and close[1] <= lastM1High and close > lastM1High
+                bullChoch := true
+                chochCount += 1
+                chochLevel := lastM1High
+                chochBar := bar_index
+                state := "CHOCH_FOUND"
+            else if state == "WAITING_CHOCH" and bar_index > reactionBar and direction == -1 and hasHigherLow and close[1] >= lastM1Low and close < lastM1Low
+                bearChoch := true
+                chochCount += 1
+                chochLevel := lastM1Low
+                chochBar := bar_index
+                state := "CHOCH_FOUND"
+            // Part 2/3: full body engulf >1.2x by default. Require the pullback candle AND
+            // engulfing candle after the CHoCH bar; require consecutive M1 bars.
+            contiguous = not na(time[1]) and time - time[1] == 60000
+            bullEngulf = contiguous and close[1] < open[1] and close > open and open <= close[1] and close > open[1] and (close - open) > (open[1] - close[1]) * Engulf_Multiplier
+            bearEngulf = contiguous and close[1] > open[1] and close < open and open >= close[1] and close < open[1] and (open - close) > (close[1] - open[1]) * Engulf_Multiplier
+            // BT already required the 0.382 touch before CHoCH. The user
+            // confirmed no additional entry-close proximity requirement.
+            pathReady = setupType == "FTB" or (setupType == "BT" and not na(fib0382))
+            // Gate before marking or submitting either entry; detection still runs for both paths.
+            edgeAllowed = (setupType == "BT" and allowBT) or (setupType == "FTB" and allowFTB)
+            canConfirm = state == "CHOCH_FOUND" and bar_index > chochBar + 1 and pathReady and edgeAllowed and (na(entryBar) or entryBar != bar_index)
+            if canConfirm and direction == 1 and bullEngulf
+                stop = math.round_to_mintick(low - Stop_Buffer_Ticks * syminfo.mintick)
+                risk = close - stop
+                target = math.round_to_mintick(close + risk * RR_Ratio)
+                if stop > 0 and risk > 0 and target > close
+                    buyEntry := true
+                    entryBar := bar_index
+                    state := "ENTRY_SIGNAL"
+                    array.push(vDirections, 1)
+                    array.push(vEntryBars, bar_index)
+                    array.push(vStops, stop)
+                    array.push(vTargets, target)
+            else if canConfirm and direction == -1 and bearEngulf
+                stop = math.round_to_mintick(high + Stop_Buffer_Ticks * syminfo.mintick)
+                risk = stop - close
+                target = math.round_to_mintick(close - risk * RR_Ratio)
+                if risk > 0 and target > 0 and target < close
+                    sellEntry := true
+                    entryBar := bar_index
+                    state := "ENTRY_SIGNAL"
+                    array.push(vDirections, -1)
+                    array.push(vEntryBars, bar_index)
+                    array.push(vStops, stop)
+                    array.push(vTargets, target)
+
+// Confirmations are signals, not necessarily filled orders.
+var int confirmationCount = 0
+if barstate.isconfirmed and (buyEntry or sellEntry)
+    confirmationCount += 1
+
+plot(isM1 and isStandard and validHaHigh ? haSwingHigh : na, title="Confirmed M5 HA swing high (provisional pivot)", color=color.new(color.red, 30), style=plot.style_stepline)
+plot(isM1 and isStandard and validHaLow ? haSwingLow : na, title="Confirmed M5 HA swing low (provisional pivot)", color=color.new(color.green, 30), style=plot.style_stepline)
+plot(isGoldenSession ? fib0382 : na, title="Candidate 0.382 level", color=color.orange, linewidth=3, style=plot.style_linebr)
+plot(isGoldenSession ? chochLevel : na, title="CHoCH break level - VHB buy / VLB sell", color=color.aqua, linewidth=2, style=plot.style_linebr)
+// Active FTB levels remain visible outside golden sessions when enabled.
+// HA levels are synthetic and not guaranteed executable market prices.
+plot(Debug_M5 and isM1 and isStandard ? activeExpectedHigh : na, title="Debug active HA pivot high", color=color.new(color.red, 30), style=plot.style_linebr)
+plot(Debug_M5 and isM1 and isStandard ? activeExpectedLow : na, title="Debug active HA pivot low", color=color.new(color.green, 30), style=plot.style_linebr)
+// These are 1/NA state flags per bar, not cumulative event counts.
+plot(Debug_M5 and expectingBullBOS ? 1 : na, title="Expecting Bull BOS count", display=display.data_window)
+plot(Debug_M5 and expectingBearBOS ? 1 : na, title="Expecting Bear BOS count", display=display.data_window)
+plot(isGoldenSession ? ftbLevel : na, title="FTB failed level", color=color.fuchsia, linewidth=2, style=plot.style_linebr)
+plotshape(markFtbHigh, title="FTB failed high candidate - bearish shift", text="FTB-?", style=shape.labeldown, location=location.abovebar, color=color.fuchsia, textcolor=color.white, size=size.tiny)
+plotshape(markFtbLow, title="FTB failed low candidate - bullish shift", text="FTB+?", style=shape.labelup, location=location.belowbar, color=color.fuchsia, textcolor=color.white, size=size.tiny)
+plotshape(bullChoch, title="Bullish CHoCH VHB candidate", text="VHB?", style=shape.labelup, location=location.belowbar, color=color.teal, textcolor=color.white, size=size.tiny)
+plotshape(bearChoch, title="Bearish CHoCH VLB candidate", text="VLB?", style=shape.labeldown, location=location.abovebar, color=color.maroon, textcolor=color.white, size=size.tiny)
+plotshape(buyEntry, title="Simulated buy confirmation", text="BUY?", style=shape.triangleup, location=location.belowbar, color=color.lime, textcolor=color.white, size=size.small)
+plotshape(sellEntry, title="Simulated sell confirmation", text="SELL?", style=shape.triangledown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
+// Multiple exits on one bar share a marker; virtual brackets are not fills.
+plotshape(vExitStop, title="Virtual stop exit bar", text="V-SL", style=shape.xcross, location=location.abovebar, color=color.red, size=size.tiny)
+plotshape(vExitTarget, title="Virtual target exit bar", text="V-TP", style=shape.xcross, location=location.abovebar, color=color.lime, size=size.tiny)
+plotshape(vExitUnknown, title="Virtual exit unknown or missing data", text="V-?", style=shape.xcross, location=location.abovebar, color=color.orange, size=size.tiny)
+var table panel = table.new(position.top_right, 2, 19, border_width=1)
+if barstate.islast
+    table.cell(panel, 0, 0, "PRO V1 DRAFT", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 0, not Enable_Simulation ? "OFF" : not isM1 or not isStandard ? "USE STANDARD M1" : not Bypass_Session and not Sessions_Confirmed ? "CONFIRM SESSIONS" : Bypass_Session ? "TEST BYPASS" : "SIMULATION ONLY", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 1, "Session", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 1, isGoldenSession ? (Bypass_Session ? "ALL HOURS (TEST)" : "GOLDEN") : "NO TRADE", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 2, "State", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 2, state, text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 3, "Path / anchor", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 3, setupType == "FTB" ? "FTB: REVIEW" : direction == -1 ? "BT BEAR: REVIEW" : direction == 1 ? "BT BULL: REVIEW" : "UNAVAILABLE", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 4, Debug_M5 ? "M5 Pivots Today" : "", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 4, Debug_M5 ? str.tostring(m5PivotsToday) : "", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 5, "Testing Edge", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 5, Test_Mode, text_color=color.yellow, bgcolor=color.black)
+    table.cell(panel, 0, 6, Debug_M5 ? "HA Index / Active H-L" : "", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 6, Debug_M5 ? str.tostring(haIndex) + " / " + str.tostring(expectingBullBOS) + "-" + str.tostring(expectingBearBOS) : "", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 7, "Entry signals", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 7, str.tostring(confirmationCount), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 8, "Virtual open", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 8, str.tostring(array.size(vDirections)), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 9, "Virtual closed", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 9, str.tostring(vClosed), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 10, "Virtual censored", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 10, str.tostring(vCensored), text_color=color.orange, bgcolor=color.black)
+    table.cell(panel, 0, 11, "Both touched (unknown)", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 11, str.tostring(vAmbiguous), text_color=color.orange, bgcolor=color.black)
+    table.cell(panel, 0, 12, "Virtual positions total", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 12, str.tostring(vClosed + vCensored + array.size(vDirections)), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 13, "Scope", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 13, "LOADED BARS ONLY", text_color=color.yellow, bgcolor=color.black)
+    table.cell(panel, 0, 14, "Enabled M1 bars", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 14, str.tostring(enabledBars), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 15, "BT raw candidates", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 15, str.tostring(btRawCount), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 16, "FTB raw candidates", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 16, str.tostring(ftbRawCount), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 17, "BT fib reactions", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 17, str.tostring(reactionCount), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 18, "CHoCH candidates", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 18, str.tostring(chochCount), text_color=color.white, bgcolor=color.black)
+
+// Optional alert conditions indicate candidates only, not filled orders.
+alertcondition(bullBos, title="BT bullish candidate", message="TradingBrain mirrored bullish BT candidate")
+alertcondition(bearBos, title="BT bearish candidate", message="TradingBrain mirrored bearish BT candidate")
+alertcondition(failedHigh, title="FTB failed high candidate", message="TradingBrain mirrored failed high candidate")
+alertcondition(failedLow, title="FTB failed low candidate", message="TradingBrain mirrored failed low candidate")
+alertcondition(bullChoch, title="Bullish CHoCH candidate", message="TradingBrain mirrored bullish CHoCH candidate")
+alertcondition(bearChoch, title="Bearish CHoCH candidate", message="TradingBrain mirrored bearish CHoCH candidate")
+alertcondition(buyEntry, title="Buy confirmation candidate", message="TradingBrain mirrored simulated buy confirmation")
+alertcondition(sellEntry, title="Sell confirmation candidate", message="TradingBrain mirrored simulated sell confirmation")

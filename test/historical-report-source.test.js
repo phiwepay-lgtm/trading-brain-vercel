@@ -3,7 +3,7 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const {readFileSync} = require('node:fs');
 const {createHash} = require('node:crypto');
-const read = p => readFileSync(`public/ea/${p}`, 'utf8');
+const read = p => readFileSync(`reference/legacy-ea/${p}`, 'utf8');
 const hash = s => createHash('sha256').update(s.trim()).digest('hex');
 const strategy = read('TradingBrain_M5_M1_v153_Mirrored.pine');
 const indicator = read('TradingBrain_Indicator_v153_Mirrored.pine');

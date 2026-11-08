@@ -12,7 +12,7 @@ No full rules were verified by the reviewed evidence. The user previously descri
 
 ## Experimental v14 — not verified strategy logic
 
-`public/ea/TradingBrain_M5_M1_v14.pine` is a separate, default-off structure study based on the user's Part 1 and Part 2 descriptions. It does not replace the legacy PR12 download. The separate prior five-bar-extreme v14 study was removed; PR12 remains a legacy proxy and was not fitted to the journal.
+`reference/legacy-ea/TradingBrain_M5_M1_v14.pine` is a separate, default-off structure study based on the user's Part 1 and Part 2 descriptions. It does not replace the legacy PR12 download. The separate prior five-bar-extreme v14 study was removed; PR12 remains a legacy proxy and was not fitted to the journal.
 
 The v14 draft uses provisional M5/M1 confirmed pivots, an M5 breakout, a candidate 0.382 level and a sequential M1 CHoCH/engulfing simulation. Those algorithmic interpretations have not been verified against the journal screenshots. It is not proof of the user's visual setup or performance; the session times, pivot rules and bearish fib anchors remain to be confirmed. The bullish break is labeled VHB and bearish break VLB; the phrase “VLB anchor” in the bullish example remains ambiguous. Do not reinterpret the three conflicting journal records without confirmation.
 

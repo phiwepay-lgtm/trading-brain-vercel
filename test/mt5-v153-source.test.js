@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
-const source = fs.readFileSync(path.join(root, 'public/ea/TradingBrain_Tester_v153.mq5'), 'utf8');
-const presetDir = path.join(root, 'public/ea');
+const source = fs.readFileSync(path.join(root, 'reference/legacy-ea/TradingBrain_Tester_v153.mq5'), 'utf8');
+const presetDir = path.join(root, 'reference/legacy-ea');
 
 function readPreset(name) {
   const buffer = fs.readFileSync(path.join(presetDir, name));
@@ -64,8 +64,8 @@ test('all presets match the draft inputs and are inert until deliberately enable
   }
 });
 
-test('Download Center exposes the separate tester kit', () => {
+test('Download Center no longer exposes the archived tester kit', () => {
   const page = fs.readFileSync(path.join(root, 'app/ea/download-center.tsx'), 'utf8');
-  assert.match(page, /href="\/ea\/TradingBrain-MT5-v153-Tester\.zip"/);
-  assert.match(page, /Uncompiled tester-only EA, six disabled input presets and setup guide/);
+  assert.doesNotMatch(page, /TradingBrain-MT5-v153-Tester\.zip/);
+  assert.match(page, /TradingBrain_Pro_V1_Tester\.mq5/);
 });

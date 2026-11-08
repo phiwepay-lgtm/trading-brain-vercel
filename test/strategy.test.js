@@ -2,18 +2,18 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const crypto=require('node:crypto');
-const path='public/ea/TradingBrain_Strategy.pine';
+const path='reference/legacy-ea/TradingBrain_Strategy.pine';
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 
 test('PR11 indicator and EA implementation are preserved',()=>{
-  assert.equal(sha(fs.readFileSync('public/ea/TradingBrain_GOLD_M1_VLB_VHB.pine')),'d5ce486da434af5c59fd4e9b313ce15de802b82112231b39510a4f4217140cf4');
-  const ea=fs.readFileSync('public/ea/TradingBrain.mq5','utf8');
+  assert.equal(sha(fs.readFileSync('reference/legacy-ea/TradingBrain_GOLD_M1_VLB_VHB.pine')),'d5ce486da434af5c59fd4e9b313ce15de802b82112231b39510a4f4217140cf4');
+  const ea=fs.readFileSync('reference/legacy-ea/TradingBrain.mq5','utf8');
   assert.match(ea,/^\/\/ TODO PR13: WebRequest bridge/);
   assert.equal(sha(ea.slice(ea.indexOf('\n')+1)),'9c3e7bc81aebb23dfc270689d86de6b241f4ee50a9cf7f03f5b905515ca59206');
   assert.doesNotMatch(ea,/OrderSend\s*\(|WebRequest\s*\(|CTrade/);
 });
 test('strategy contains simulation guards, aligned HTF data, bounded stats and opt-in alerts',()=>{
-  const pine=fs.readFileSync(path,'utf8'), indicator=fs.readFileSync('public/ea/TradingBrain_GOLD_M1_VLB_VHB.pine','utf8');
+  const pine=fs.readFileSync(path,'utf8'), indicator=fs.readFileSync('reference/legacy-ea/TradingBrain_GOLD_M1_VLB_VHB.pine','utf8');
   for(const token of ['M5_high = request.security','M5_low = request.security','M5_close = request.security','M5_bar_index = request.security','M5_BT_0382 = M5_high - M5_range * 0.382','M5_FTB_0382 = M5_low + M5_range * 0.382']) {
     assert.ok(indicator.includes(token) && pine.includes(token),token);
   }

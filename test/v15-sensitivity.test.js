@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const pine = fs.readFileSync(path.join(__dirname, '../public/ea/TradingBrain_M5_M1_v15.pine'), 'utf8');
+const pine = fs.readFileSync(path.join(__dirname, '../reference/legacy-ea/TradingBrain_M5_M1_v15.pine'), 'utf8');
 
 test('v15 debug defaults and pivot-age thresholds are explicit', () => {
   assert.match(pine, /M5_Lookback = input\.int\(200,/);
