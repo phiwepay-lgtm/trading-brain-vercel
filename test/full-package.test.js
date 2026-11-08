@@ -14,11 +14,22 @@ test('full package system uses only local uploaded journal aggregates and preser
   const empty=journalSystem([]);assert.equal(empty.stats_source.trades,0);assert.equal(empty.stats_source.total_pnl,null);assert.equal(empty.stats_source.winrate_full_tp,null);
   assert.throws(()=>journalSystem({}),TypeError);
 });
-test('Pine skeleton explicitly discloses unimplemented logic and cannot submit orders',()=>{
+test('Pine source has non-repainting HTF data, explicit opt-in and visual-only output',()=>{
   const pine=fs.readFileSync('public/ea/TradingBrain_GOLD_M1_VLB_VHB.pine','utf8');
-  assert.match(pine,/^\/\/@version=5/);assert.match(pine,/indicator\("TradingBrain - GOLD M1 VLB\/VHB - 40 Trades", overlay=true\)/);
-  assert.match(pine,/Best Hour: 17:00 NY/);assert.match(pine,/PF 4\.76/);assert.match(pine,/NOT implemented/);
+  assert.match(pine,/^\/\/@version=5/);assert.match(pine,/input\.bool\(false, "Enable visual scanner/);assert.match(pine,/input\.bool\(true, "Use M5 HTF Filter/);
+  assert.match(pine,/ta\.highest\(high, M5_Len\)\[1\].*lookahead=barmerge\.lookahead_on/);
+  assert.match(pine,/ta\.lowest\(low, M5_Len\)\[1\].*lookahead=barmerge\.lookahead_on/);
+  assert.match(pine,/close\[1\].*lookahead=barmerge\.lookahead_on/);
+  assert.match(pine,/vlbCandidate and M1_VLB_valid/);assert.match(pine,/vhbCandidate and M1_VHB_valid/);
+  assert.match(pine,/barstate\.isconfirmed/);assert.match(pine,/table\.new\(position\.top_right, 2, 6/);assert.match(pine,/box\.new/);
+  assert.match(pine,/unverified/);assert.match(pine,/not verified VLB\/VHB/);
   const executable=pine.split('\n').filter(line=>!line.trim().startsWith('//')).join('\n');
   assert.doesNotMatch(executable,/strategy\s*\(|strategy\.entry|strategy\.order|alertcondition\s*\(/);
-  assert.match(executable,/plot\(na/);
+});
+test('MT5 source stays opt-in and contains no execution or network APIs',()=>{
+  const mq=fs.readFileSync('public/ea/TradingBrain.mq5','utf8');
+  assert.match(mq,/Enable_Visual_Scanner = false/);assert.match(mq,/Use_M5_Filter = true/);
+  assert.match(mq,/iHigh\(_Symbol,PERIOD_M5/);assert.match(mq,/iLow\(_Symbol,PERIOD_M5/);
+  assert.match(mq,/m5shift\+1/);assert.match(mq,/OBJ_RECTANGLE/);assert.match(mq,/OBJ_ARROW/);
+  assert.doesNotMatch(mq,/OrderSend\s*\(|OrderSendAsync\s*\(|CTrade|WebRequest\s*\(|trade\.Buy|trade\.Sell/);
 });
