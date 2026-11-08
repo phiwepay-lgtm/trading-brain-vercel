@@ -265,6 +265,13 @@ if barstate.isconfirmed
                     strategy.entry("Sell", strategy.short, qty=Order_Quantity)
                     strategy.exit("Sell bracket", from_entry="Sell", stop=stop, limit=target)
 
+// Confirmations are signals, not necessarily filled orders.
+var int confirmationCount = 0
+if barstate.isconfirmed and (buyEntry or sellEntry)
+    confirmationCount += 1
+// The Strategy Tester is the authority for simulated fills and prices.
+exitOnThisBar = strategy.closedtrades > 0 ? strategy.closedtrades.exit_bar_index(strategy.closedtrades - 1) == bar_index : false
+
 plot(isM1 and isStandard and validHaHigh ? haSwingHigh : na, title="Confirmed M5 HA swing high (provisional pivot)", color=color.new(color.red, 30), style=plot.style_stepline)
 plot(isM1 and isStandard and validHaLow ? haSwingLow : na, title="Confirmed M5 HA swing low (provisional pivot)", color=color.new(color.green, 30), style=plot.style_stepline)
 plot(isGoldenSession ? fib0382 : na, title="Candidate 0.382 level", color=color.orange, linewidth=3, style=plot.style_linebr)
@@ -283,7 +290,8 @@ plotshape(bullChoch, title="Bullish CHoCH VHB candidate", text="VHB?", style=sha
 plotshape(bearChoch, title="Bearish CHoCH VLB candidate", text="VLB?", style=shape.labeldown, location=location.abovebar, color=color.maroon, textcolor=color.white, size=size.tiny)
 plotshape(buyEntry, title="Simulated buy confirmation", text="BUY?", style=shape.triangleup, location=location.belowbar, color=color.lime, textcolor=color.white, size=size.small)
 plotshape(sellEntry, title="Simulated sell confirmation", text="SELL?", style=shape.triangledown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
-var table panel = table.new(position.top_right, 2, 7, border_width=1)
+plotshape(exitOnThisBar, title="Strategy simulated exit bar", text="EXIT", style=shape.xcross, location=location.abovebar, color=color.yellow, size=size.tiny)
+var table panel = table.new(position.top_right, 2, 12, border_width=1)
 if barstate.islast
     table.cell(panel, 0, 0, "STRUCTURE DRAFT", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 1, 0, not Enable_Simulation ? "OFF" : not isM1 or not isStandard ? "USE STANDARD M1" : not Bypass_Session and not Sessions_Confirmed ? "CONFIRM SESSIONS" : Bypass_Session ? "TEST BYPASS" : "SIMULATION ONLY", text_color=color.white, bgcolor=color.black)
@@ -299,3 +307,13 @@ if barstate.islast
     table.cell(panel, 1, 5, Test_Mode, text_color=color.yellow, bgcolor=color.black)
     table.cell(panel, 0, 6, Debug_M5 ? "HA Index / Active H-L" : "", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 1, 6, Debug_M5 ? str.tostring(haIndex) + " / " + str.tostring(expectingBullBOS) + "-" + str.tostring(expectingBearBOS) : "", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 7, "Entry signals", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 7, str.tostring(confirmationCount), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 8, "Sim closed trades", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 8, str.tostring(strategy.closedtrades), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 9, "Sim open trades", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 9, str.tostring(strategy.opentrades), text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 10, "History", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 10, "LOADED BARS ONLY", text_color=color.yellow, bgcolor=color.black)
+    table.cell(panel, 0, 11, "Sim trades total", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 11, str.tostring(strategy.closedtrades + strategy.opentrades), text_color=color.white, bgcolor=color.black)

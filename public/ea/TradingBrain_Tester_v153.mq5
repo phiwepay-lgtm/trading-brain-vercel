@@ -50,6 +50,13 @@ int direction=0;
 string setupType="NONE";
 double fib=0, chochLevel=0, failedLevel=0;
 bool hadPosition=false;
+// Reporting is scoped to transactions observed in this tester run. Reconcile
+// these provisional position counts against the native Strategy Tester report.
+long filledPositions=0, closedPositions=0;
+bool reportReliable=true, reportFinished=false;
+struct ReportedPosition { ulong id; bool filled; bool closed; };
+ReportedPosition reportedPositions[];
+
 
 bool ValidInputs() {
    return M5_Lookback>=2 && M5_Left>=1 && M5_Right>=1 && M1_Left>=1 && M1_Right>=1 &&
@@ -134,6 +141,66 @@ void DrawLevel(string label,double price,color c) {
 void ClearLevel(string label) {
    if(TB_TESTER_VISUALS && MQLInfoInteger(MQL_TESTER) && MQLInfoInteger(MQL_VISUAL_MODE))
       ObjectDelete(0,"TBV153_"+label);
+}
+// Draw executed tester deals separately from confirmation-candle markers.
+void DrawDealMarker(ulong ticket,datetime when,double price,bool isExit) {
+   if(!TB_TESTER_VISUALS || !MQLInfoInteger(MQL_TESTER) || !MQLInfoInteger(MQL_VISUAL_MODE)) return;
+   string name="TBV153_DEAL_"+IntegerToString((long)ticket);
+   if(ObjectCreate(0,name,OBJ_ARROW,0,when,price)) {
+      ObjectSetInteger(0,name,OBJPROP_ARROWCODE,isExit?251:159);
+      ObjectSetInteger(0,name,OBJPROP_COLOR,isExit?clrYellow:clrWhite);
+      ObjectSetString(0,name,OBJPROP_TOOLTIP,isExit?"Simulated exit deal (may be partial)":"Simulated entry deal (may be partial)");
+   }
+}
+void UpdateReportPanel() {
+   if(!TB_TESTER_VISUALS || !MQLInfoInteger(MQL_TESTER) || !MQLInfoInteger(MQL_VISUAL_MODE)) return;
+   string totals=reportReliable ?
+      "Filled positions: "+IntegerToString(filledPositions)+"  Closed: "+IntegerToString(closedPositions)+"  Open: "+IntegerToString(filledPositions-closedPositions) :
+      "Position counts unavailable: check tester report / Journal";
+   Comment(reportFinished?"TB v15.3 TESTER ONLY - run ended\n":"TB v15.3 TESTER ONLY - current run\n",
+           "Entry signals: ",IntegerToString(entryCandidates),"  Accepted requests: ",IntegerToString(acceptedOrders),"\n",
+           totals,"\nWhite = entry deal, yellow X = exit deal; arrows = confirmations.\n",
+           "Provisional counts: verify in Strategy Tester Results / Report.");
+}
+// Count one filled/closed position per position ID, not one per partial deal.
+// HistorySelectByPosition provides the whole position even if trade-transaction
+// callbacks arrive out of order. Reversals/close-by are outside this EA's
+// one-position bracket model and are explicitly reported as unsupported.
+void RecordTesterDeal(ulong ticket) {
+   if(!HistoryDealSelect(ticket)) { reportReliable=false; return; }
+   if(HistoryDealGetString(ticket,DEAL_SYMBOL)!=_Symbol) return;
+   ulong positionId=(ulong)HistoryDealGetInteger(ticket,DEAL_POSITION_ID);
+   ENUM_DEAL_ENTRY kind=(ENUM_DEAL_ENTRY)HistoryDealGetInteger(ticket,DEAL_ENTRY);
+   datetime when=(datetime)HistoryDealGetInteger(ticket,DEAL_TIME);
+   double price=HistoryDealGetDouble(ticket,DEAL_PRICE);
+   if(positionId==0 || !HistorySelectByPosition(positionId)) { reportReliable=false; return; }
+   double opened=0,exited=0;
+   bool ours=false,otherEntry=false,unsupported=false;
+   for(int i=0;i<HistoryDealsTotal();i++) {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0) { reportReliable=false; continue; }
+      ENUM_DEAL_ENTRY entry=(ENUM_DEAL_ENTRY)HistoryDealGetInteger(deal,DEAL_ENTRY);
+      double volume=HistoryDealGetDouble(deal,DEAL_VOLUME);
+      if(entry==DEAL_ENTRY_IN) {
+         if(HistoryDealGetInteger(deal,DEAL_MAGIC)==Magic_Number) { ours=true; opened+=volume; }
+         else otherEntry=true;
+      } else if(entry==DEAL_ENTRY_OUT) exited+=volume;
+      else if(entry==DEAL_ENTRY_INOUT || entry==DEAL_ENTRY_OUT_BY) unsupported=true;
+   }
+   if(!ours) return;
+   if(otherEntry || unsupported || exited>opened+1e-8) { reportReliable=false; }
+   int index=-1;
+   for(int i=0;i<ArraySize(reportedPositions);i++) if(reportedPositions[i].id==positionId) { index=i; break; }
+   if(index<0) {
+      index=ArraySize(reportedPositions);
+      if(ArrayResize(reportedPositions,index+1)<0) { reportReliable=false; return; }
+      reportedPositions[index].id=positionId; reportedPositions[index].filled=false; reportedPositions[index].closed=false;
+   }
+   if(opened>0 && !reportedPositions[index].filled) { reportedPositions[index].filled=true; filledPositions++; }
+   if(!otherEntry && !unsupported && opened>0 && exited>=opened-1e-8 && !reportedPositions[index].closed) {
+      reportedPositions[index].closed=true; closedPositions++;
+   }
+   if(kind==DEAL_ENTRY_IN || kind==DEAL_ENTRY_OUT) DrawDealMarker(ticket,when,price,kind==DEAL_ENTRY_OUT);
 }
 bool HasPosition() { return PositionSelect(_Symbol); }
 // Order placement is hard-gated to Strategy Tester, separately from detection.
@@ -259,8 +326,9 @@ void ProcessClosedM1() {
       double risk=direction==1?m1[k].close-stop:stop-m1[k].close;
       if(stop>0 && risk>0) {
          entryCandidates++;
+         DrawMarker(direction==1?"BUY SIGNAL":"SELL SIGNAL",t,m1[k].close,direction==1?clrLime:clrRed,direction==1);
          if(TesterOrder(direction==1,m1[k].close,stop,tick)) {
-            acceptedOrders++; DrawMarker(direction==1?"BUY":"SELL",t,m1[k].close,direction==1?clrLime:clrRed,direction==1);
+            acceptedOrders++;
             state=ENTRY_SIGNAL;
          } else { state=EXPECTING_BOS; ResetSetup(); }
       }
@@ -269,18 +337,26 @@ void ProcessClosedM1() {
 int OnInit() {
    if(!MQLInfoInteger(MQL_TESTER)) { Print("TB v15.3: Strategy Tester only; no live or demo operation."); return INIT_FAILED; }
    if(!ValidInputs()) { Print("TB v15.3: invalid inputs"); return INIT_PARAMETERS_INCORRECT; }
+   // Clear markers from an earlier visual run if this tester chart is reused.
+   if(TB_TESTER_VISUALS && MQLInfoInteger(MQL_TESTER)) ObjectsDeleteAll(0,"TBV153_");
    trade.SetExpertMagicNumber(Magic_Number);
    trade.SetTypeFillingBySymbol(_Symbol);
    lastM1Open=iTime(_Symbol,PERIOD_M1,0);
    Print("TB v15.3 research: tester orders require Enable_Simulation AND Enable_StrategyTester_Orders; bypass=",Bypass_Session);
    if(!Bypass_Session && (!Sessions_Confirmed || !Broker_UTC_Offset_Confirmed))
       Print("TB v15.3: session mode requires confirmation of both sessions and historical broker UTC offset.");
+   UpdateReportPanel();
    return INIT_SUCCEEDED;
+}
+void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &request,const MqlTradeResult &result) {
+   if(!MQLInfoInteger(MQL_TESTER) || trans.type!=TRADE_TRANSACTION_DEAL_ADD || trans.deal==0) return;
+   RecordTesterDeal(trans.deal);
+   UpdateReportPanel();
 }
 void OnTick() {
    datetime current=iTime(_Symbol,PERIOD_M1,0);
    if(current<=0 || current==lastM1Open) return;
-   lastM1Open=current; ProcessClosedM1();
+   lastM1Open=current; ProcessClosedM1(); UpdateReportPanel();
 }
 void OnDeinit(const int reason) {
    if(MQLInfoInteger(MQL_TESTER)) {
@@ -292,6 +368,12 @@ void OnDeinit(const int reason) {
             " BT candidates=",btCandidates," FTB candidates=",ftbCandidates," CHoCH=",chochCandidates,
             " entry candidates=",entryCandidates," accepted orders=",acceptedOrders,
             ". Counts are diagnostics, NOT closed trades or verified performance.");
+      Print("TB v15.3 reporting: entry signals=",entryCandidates," accepted requests=",acceptedOrders,
+            " filled positions=",filledPositions," closed positions=",closedPositions,
+            " open positions=",filledPositions-closedPositions," reliable=",reportReliable,
+            ". Provisional tester-run counts; reconcile against the native Results/Report.");
    }
-   if(TB_TESTER_VISUALS && MQLInfoInteger(MQL_TESTER)) ObjectsDeleteAll(0,"TBV153_");
+   // Keep this run's visual markers while the tester chart remains open. They
+   // are cleared at the start of the next run and are not persistent storage.
+   reportFinished=true; UpdateReportPanel();
 }

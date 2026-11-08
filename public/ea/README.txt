@@ -46,6 +46,18 @@ the mirrored draft, visual markers, virtual positions and optional alerts.
 It is uncompiled; its virtual exits are not guaranteed to match the strategy
 emulator and alerts are not broker orders.
 
+HISTORICAL MARKERS AND COUNTS (DRAFT)
+On loaded standard M1 bars the mirrored strategy shows confirmation and
+simulated exit-bar markers; its panel separates signals from TradingView's
+closed and open simulated trades. Use the native Strategy Tester trade list for
+fill details. The indicator shows virtual stop, target or ambiguous double-touch
+exit bars and separates signals, virtual closed/open and ambiguous exits; a
+bracket touch is not a broker fill. The MT5 visual tester panel and deal markers
+cover the current run only; use the native tester Results/Report for individual
+deals. Counters do not reconstruct data outside loaded/run history, and chart
+scrolling is manual; no persistent dashboard trade list is supplied. These
+features have not been compiled or verified in either platform.
+
 TradingBrain_M5_M1_v15.pine is the separate v15.3 strategy draft. Paste it
 into TradingView's Pine Editor and compile it there on a standard M1 chart.
 Simulation defaults off. It has not been compiled or backtested here, and it
