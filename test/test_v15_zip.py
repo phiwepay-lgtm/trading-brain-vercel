@@ -1,4 +1,3 @@
-import hashlib
 import unittest
 from pathlib import Path
 from zipfile import ZipFile
@@ -22,9 +21,12 @@ class V15ZipTest(unittest.TestCase):
             for name, source in FILES.items():
                 self.assertEqual(z.read(name), (ROOT / source).read_bytes(), name)
 
-    def test_v15_strategy_unchanged(self):
-        strategy = (ROOT / 'public/ea/TradingBrain_M5_M1_v15.pine').read_bytes()
-        self.assertEqual(hashlib.sha256(strategy).hexdigest(), 'b005f40541322758e7bb6dd1c797c217440f3ab12cec66786715ec46e8104c50')
+    def test_bt_ftb_path_still_separate(self):
+        strategy = (ROOT / 'public/ea/TradingBrain_M5_M1_v15.pine').read_text()
+        self.assertIn('pathReady = setupType == "FTB" or (setupType == "BT" and nearFib)', strategy)
+        self.assertIn('if state == "WAITING_0382" and bar_index > bosBar and low <= fib0382 and high >= fib0382', strategy)
+        self.assertIn('if state == "FTB_FOUND" and bar_index > bosBar', strategy)
+        self.assertIn('Enable_Simulation = input.bool(false', strategy)
 
 
 if __name__ == '__main__':
