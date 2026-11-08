@@ -16,14 +16,14 @@ test('v15 debug defaults and pivot-age thresholds are explicit', () => {
   assert.match(pine, /plot\(Debug_M5 and isM1 and isStandard \? activeExpectedLow : na/);
   assert.match(pine, /plot\(Debug_M5 and expectingBullBOS \? 1 : na, title="Expecting Bull BOS count", display=display\.data_window\)/);
   assert.match(pine, /plot\(Debug_M5 and expectingBearBOS \? 1 : na, title="Expecting Bear BOS count", display=display\.data_window\)/);
-  assert.match(pine, /table\.new\(position\.top_right, 2, 6,/);
+  assert.match(pine, /table\.new\(position\.top_right, 2, 7,/);
   assert.match(pine, /Debug_M5 \? "M5 Pivots Today"/);
-  assert.match(pine, /Debug_M5 \? str\.tostring\(isNewHighPivot or isNewLowPivot\)/);
+  assert.match(pine, /Debug_M5 \? str\.tostring\(m5PivotsToday\)/);
 });
 
 test('sensitivity does not turn off session or alter BT/FTB path requirements', () => {
   assert.match(pine, /Enable_Simulation = input\.bool\(false/);
-  assert.match(pine, /isGoldenSession = Enable_Simulation and Sessions_Confirmed and isM1 and isStandard and \(isNQ or isAsian\)/);
+  assert.match(pine, /isGoldenSession = Enable_Simulation and isM1 and isStandard and inSession/);
   assert.match(pine, /if state == "WAITING_0382" and bar_index > bosBar and low <= fib0382 and high >= fib0382/);
   assert.match(pine, /pathReady = setupType == "FTB" or \(setupType == "BT" and nearFib\)/);
   assert.match(pine, /request\.security\(haTicker, "5", f_completedHA\(\), lookahead=barmerge\.lookahead_on\)/);

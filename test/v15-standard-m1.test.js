@@ -7,7 +7,7 @@ const pine = fs.readFileSync(path.join(__dirname, '../public/ea/TradingBrain_M5_
 test('v15 keeps M5 HA and standard-M1 visual-break confirmation', () => {
   assert.match(pine, /isM1 = timeframe\.isminutes and timeframe\.multiplier == 1/);
   assert.match(pine, /isStandard = chart\.is_standard/);
-  assert.match(pine, /isGoldenSession = Enable_Simulation and Sessions_Confirmed and isM1 and isStandard/);
+  assert.match(pine, /isGoldenSession = Enable_Simulation and isM1 and isStandard and inSession/);
   assert.match(pine, /haTicker = ticker\.heikinashi\(syminfo\.tickerid\)/);
   assert.match(pine, /request\.security\(haTicker, "5", f_completedHA\(\), lookahead=barmerge\.lookahead_on\)/);
   assert.match(pine, /m1PH = ta\.pivothigh\(high, M1_Left, M1_Right\)/);
