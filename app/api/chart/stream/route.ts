@@ -7,6 +7,7 @@ export async function GET(request: Request) {
   const symbol = getSymbol(new URL(request.url).searchParams.get('symbol'));
   if (!symbol) return Response.json({ error: 'Invalid symbol.' }, { status: 400 });
   const denied = chartAccess(request); if (denied) return denied;
+  if (!process.env.TWELVE_DATA_API_KEY) return Response.json({ error: 'Twelve Data stream unavailable.' }, { status: 503 });
   const encoder = new TextEncoder();
   let dispose = () => {};
   const stream = new ReadableStream({

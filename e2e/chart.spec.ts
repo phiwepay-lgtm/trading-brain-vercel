@@ -1,17 +1,22 @@
 import { test, expect } from '@playwright/test';
 const TOKEN = 'test-token-contains-24-characters';
 
-test('default chart and APIs clearly report missing configuration', async ({ page, request }) => {
+test('default chart falls back to visibly simulated data without keys', async ({ page, request }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/'); await expect(page).toHaveURL(/\/chart$/);
+  await page.getByLabel('SYMBOL').selectOption('EURUSD');
+  await expect(page.getByRole('status')).toContainText('Using demo feed');
+  await page.getByRole('button', {name:'Skip - Use Demo'}).click();
   await expect(page.getByLabel('M5 chart')).toContainText('M5 — Heiken Ashi — 21 EMA');
   await expect(page.getByLabel('M1 chart')).toContainText('M1 — Candles — 9 EMA');
-  await expect(page.getByRole('status')).toContainText('Market data is not configured');
-  await expect(page.getByText('No market data to display')).toHaveCount(2);
+  await expect(page.getByRole('status')).toContainText('Using demo feed');
+  await expect(page.getByText('DEMO · SIMULATED')).toHaveCount(2);
+  await expect(page.getByText('No market data to display')).toHaveCount(0);
   await expect(page.getByText('MT5 OFFLINE')).toBeVisible();
   expect((await request.get('/api/chart/candles?symbol=bad&timeframe=M1')).status()).toBe(400);
-  expect((await request.get('/api/chart/candles?symbol=XAUUSD&timeframe=M1')).status()).toBe(503);
-  expect((await request.get('/api/chart/price?symbol=XAUUSD')).status()).toBe(503);
+  const result = await request.get('/api/chart/candles?symbol=EURUSD&timeframe=M1');
+  expect(result.headers()['x-chart-source']).toBe('demo'); expect((await result.json())).toHaveLength(500);
+  const price = await (await request.get('/api/chart/price?symbol=EURUSD')).json(); expect(price.is_demo).toBe(true);
   expect((await request.get('/api/chart/stream?symbol=XAUUSD')).status()).toBe(503);
   expect(errors).toEqual([]);
 });
@@ -23,12 +28,10 @@ test('mocked feed updates both charts, drawing persistence, copy, journal and co
     const url = new URL(route.request().url()), tf = url.searchParams.get('timeframe'), seconds = tf === 'M5' ? 300 : 60;
     const end = url.searchParams.has('before') ? Number(url.searchParams.get('before')) - seconds : Math.floor(time / seconds) * seconds;
     const rows = Array.from({length: 500}, (_, i) => ({time: end - (499 - i) * seconds, open: 2500 + i * .001, high: 2502 + i * .001, low: 2498 + i * .001, close: 2501 + i * .001, volume: null}));
-    await route.fulfill({ status: 200, json: rows });
+    await route.fulfill({ status: 200, headers: {'X-Chart-Source':'binance','X-Chart-Instrument':'PAXGUSDT'}, json: rows });
   });
-  await page.route('**/api/chart/stream?**', async route => {
-    const symbol = new URL(route.request().url()).searchParams.get('symbol');
-    const tick = {symbol, time, last: 2501.75, bid: 2501.70, ask: 2501.80};
-    await route.fulfill({status: 200, contentType: 'text/event-stream', body: `event: status\ndata: {"state":"subscribed"}\n\nevent: tick\ndata: ${JSON.stringify(tick)}\n\n`});
+  await page.route('**/api/chart/price?**', async route => {
+    await route.fulfill({status: 200, json: {source:'binance',time,last:2501.75,bid:2501.70,ask:2501.80}});
   });
   await page.addInitScript(token => sessionStorage.setItem('chart-access-token', token), TOKEN);
   await page.goto('/chart');
@@ -48,7 +51,7 @@ test('mocked feed updates both charts, drawing persistence, copy, journal and co
   await page.getByRole('button', {name: /Sync on/}).click(); await expect(page.getByRole('button', {name: /Sync off/})).toBeVisible();
   const data = JSON.stringify({trades: [{symbol:'XAUUSD',side:'BUY',entry_time:time - 120,entry_price:2500,exit_time:time - 60,exit_price:2501,pnl:2}]});
   await page.locator('input[type=file]').setInputFiles({ name:'journal.json', mimeType:'application/json', buffer:Buffer.from(data) });
-  await expect(page.getByText(/2 markers/)).toBeVisible();
+  await expect(page.getByText(/1 trades loaded/)).toBeVisible();
   await page.reload();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('trading-brain-drawings-v1:XAUUSD:M1') || '[]').length)).toBe(1);
   await page.getByLabel('SYMBOL').selectOption('EURUSD'); await expect(page.getByText('Euro / US Dollar')).toBeVisible();
