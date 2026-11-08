@@ -11,7 +11,7 @@ test('brain contains the user-specified system and offline flags', () => {
   assert.match(brain.ltf_confirm.join(' '), /Visual High Break for buys/);
   assert.match(brain.ltf_confirm.join(' '), /Entry on the engulfing candle/);
   assert.doesNotMatch(JSON.stringify(brain), /Valid Liquidity Build/);
-  assert.match(brain.risk, /distance not specified/);
+  assert.match(brain.risk, /ATR period\/multiplier and choice unspecified/);
   assert.equal(brain.mt5_connected, false);
   assert.equal(brain.scanning, false);
 });

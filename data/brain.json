@@ -3,7 +3,7 @@
   "htf": "M5 structure confirmation required",
   "entry_zone": "0.382 fib retrace",
   "ltf_confirm": ["VLB: Visual Low Break for sells — M1 BOS/CHoCH below a low, small pullback, then engulf to a new lower low", "VHB: Visual High Break for buys — M1 CHoCH above a high, pullback (sometimes none), then engulf to a new higher high", "Entry on the engulfing candle"],
-  "risk": "0.5-1%; sell stop beyond VLB, buy stop below entry; exact stop distance not specified",
+  "risk": "0.5-1%; user-proposed XAUUSD $3 price distance or ATR, untested; ATR period/multiplier and choice unspecified; sell stop above entry/beyond VLB, buy stop below entry",
   "definitions_source": "User clarification; not independently verified from the encrypted learned-system file",
   "mt5_connected": false,
   "scanning": false,

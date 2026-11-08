@@ -19,7 +19,7 @@ test('hypothetical optimizer, tooltip, exporter and classified chart markers', a
   await expect(rr).toContainText('3/5 records');await expect(rr).toContainText('6.00 R');await expect(rr).toContainText('1 without explicit Full TP/SL/BE and 1 with conflicting labels');
   await slider.focus();await slider.press('Home');await slider.press('ArrowUp');await expect(rr).toContainText('1:2.1');await expect(rr).toContainText('1.10 R');await expect(rr).toContainText('32.3%');
   const exportText=page.getByLabel('Generated system text');await expect(exportText).toHaveValue(/TP: 1:2\.1 — selected hypothetical target/);
-  await expect(exportText).toHaveValue(/Distance not specified/);await expect(exportText).toHaveValue(/New York 14:00–16:00/);await expect(exportText).not.toHaveValue(/PRIVATE-FIXTURE/);
+  await expect(exportText).toHaveValue(/ATR period\/multiplier and choice are unspecified/);await expect(exportText).toHaveValue(/New York 14:00–16:00/);await expect(exportText).not.toHaveValue(/PRIVATE-FIXTURE/);
   const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Download text'}).click();const download=await downloadPromise;
   expect(download.suggestedFilename()).toBe('trading-system.txt');expect(await readFile((await download.path())!,'utf8')).toContain('selected hypothetical target');
   const vlb=page.getByRole('button',{name:'Filter By execution VLB + Engulf Trigger'});await vlb.focus();await expect(page.getByLabel('By execution').getByRole('tooltip')).toContainText('M1 BOS/CHoCH breaks low');
