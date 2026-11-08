@@ -125,3 +125,13 @@ TradingBrain_M5_M1_v15.pine is disabled by default and uses completed M5
 Heikin Ashi for both directions. FTB candidates go directly to M1 CHoCH
 without the BT 0.382 gate. Pivot/colour choices, sessions and swing anchors
 need confirmation. Pine compilation and backtesting have not been verified.
+
+MT5 V15.3 STRATEGY TESTER KIT (SEPARATE SOURCE PACKAGE)
+TradingBrain-MT5-v153-Tester.zip contains an uncompiled tester-only EA,
+six disabled .set input presets, and an MT5 Strategy Tester guide. It is a
+research translation, NOT verified equivalent to the Pine draft; fills, data,
+HA initialization, pivots and session clocks can differ. Compile in MetaEditor
+on your own computer. The EA cannot run live/demo, and both simulation and
+tester orders require explicit opt-in. The preset files are not chart .tpl
+files; create a chart template in MT5 as described in the guide. Broker history
+and real-tick coverage vary and no trade count or performance is guaranteed.
