@@ -2,13 +2,16 @@
 const realFetch = globalThis.fetch;
 globalThis.fetch = async function(input, init) {
   const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
+  if (url.hostname === 'api.binance.com') {
+    if (url.searchParams.get('symbol') === 'BTCUSDT') return Response.json({error:'unavailable'}, {status:451});
+    if (url.pathname.endsWith('/klines')) return Response.json([[1735819200000,'10','13','9','12','7']]);
+    if (url.pathname.endsWith('/bookTicker')) return Response.json({bidPrice:'10.1',askPrice:'10.2'});
+    if (url.pathname.endsWith('/price')) return Response.json({price:'10.15'});
+  }
   if (url.hostname !== 'api.twelvedata.com') return realFetch(input, init);
-  if (url.searchParams.get('apikey') !== 'test-provider-key') return Response.json({status:'error'}, {status: 401});
-  if (url.searchParams.get('symbol') === 'BTC/USD') return Response.json({status:'error', message:'secret must not leak'});
+  if (url.searchParams.get('apikey') !== 'test-provider-key') return Response.json({status:'error'}, {status:401});
+  if (url.searchParams.get('symbol') === 'BTC/USD') return Response.json({status:'error',message:'secret must not leak'});
   if (url.pathname === '/price') return Response.json({price:'123.45'});
-  if (url.pathname === '/time_series') return Response.json({values:[
-    {datetime:'2025-01-02 12:01:00',open:'10',high:'13',low:'9',close:'12'},
-    {datetime:'2025-01-02 12:00:00',open:'9',high:'12',low:'8',close:'10',volume:'7'}
-  ]});
+  if (url.pathname === '/time_series') return Response.json({values:[{datetime:'2025-01-02 12:01:00',open:'10',high:'13',low:'9',close:'12'},{datetime:'2025-01-02 12:00:00',open:'9',high:'12',low:'8',close:'10',volume:'7'}]});
   return Response.json({status:'error'});
 };

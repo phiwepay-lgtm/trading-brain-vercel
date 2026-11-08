@@ -1,13 +1,13 @@
 # Trading Brain
 
-A standalone Next.js dashboard for the M5 BOS → 0.382 → M1 VLB + Engulf system. It is Vercel-ready and does not connect to MT5, scan markets or place trades. Optional chart markers can be loaded from a journal JSON locally in the browser.
+A standalone Next.js dashboard for the M5 BOS → 0.382 → M1 VLB + Engulf system. It is Vercel-ready and does not connect to MT5, scan markets or place trades. An optional journal can be uploaded for a browser-local table and chart navigation.
 
 ## Current data and privacy
 
 - `data/brain.json` contains the rules supplied for this build. Its `source` is the requested provenance label; the encrypted learned-system file was **not** read or decrypted to independently verify those rules.
 - `data/journal_summary.json` is awaiting a verified 33-trade export. All performance figures are `null`, not estimates or zeroes. The separate 40-record recovery export was rejected because outcome and P&L fields disagree; it was not used to calculate performance.
-- The local journal is described by its repository as local-only and encrypted. No raw journal, screenshots, encrypted files, or keys are copied into this project.
-- `/api/status` deliberately returns `mt5_connected: false` and `scanning: false`. There is no live integration.
+- No raw journal, screenshots, encrypted files, or keys are committed to this project. The optional upload sends the JSON to the app for transient validation and persists it in browser localStorage; see the privacy note below.
+- `/api/status` deliberately returns `mt5_connected: false` and `scanning: false`. There is no MT5 integration.
 
 **Deployment privacy:** the dashboard and API routes are public unless you configure access controls. The brain rules and any committed aggregates will be visible to visitors. Do not add journal records, notes, credentials, or encrypted files to this repository. This is not financial advice.
 
@@ -40,7 +40,7 @@ The script refuses a different count, invalid flags, unrecognized or conflicting
 
 ## Deploy to Vercel
 
-Import this Git repository into Vercel, select the **Next.js** framework preset and deploy. The offline pages require no environment variables; chart market data and image assessment require the separate configuration described below. Set the build command to `npm run build` and the install command to `npm install`. Leave the output directory override unset so Vercel uses the Next.js default. `vercel.json` identifies the project as Next.js. The app uses Next.js 16; downgrading to Next.js 14 is not needed for deployment and would introduce known security advisories.
+Import this Git repository into Vercel, select the **Next.js** framework preset and deploy. The chart can run with a clearly labeled demo feed without environment variables; live Twelve Data and image assessment require the separate configuration described below. Set the build command to `npm run build` and the install command to `npm install`. Leave the output directory override unset so Vercel uses the Next.js default. `vercel.json` identifies the project as Next.js. The app uses Next.js 16; downgrading to Next.js 14 is not needed for deployment and would introduce known security advisories.
 
 ## Monitoring dashboard
 
@@ -65,26 +65,27 @@ Tests cover desktop/mobile navigation and controls, automatic diagnostics pollin
 
 ## Dual chart workspace
 
-`/chart` is the default page. It uses Lightweight Charts 4.2.x: M5 defaults to Heiken Ashi and a blue EMA 21, M1 defaults to normal candles and a yellow EMA 9. EMA is calculated from **real OHLC closes**, not synthetic Heiken Ashi closes; the HA close is not the market last. Toggle candle type and EMA separately in each pane. Pan and crosshair sync are time-based and can be switched off. M5 is above M1 on small screens. Each pane has drawing tools, a screenshot download and earlier-candle loading; drawings remain in that browser's localStorage and can be copied from M1 to M5. Clearing browser site data removes them.
+`/chart` uses Lightweight Charts 4.2.x. M5 defaults to Heiken Ashi with a blue EMA 21; M1 defaults to normal candles with a yellow EMA 9. EMA uses the selected feed's non-HA closes. Pan and crosshair sync, drawings and screenshots are available. The default data source order is:
 
-### Configure real data
+1. Twelve Data, if a server key and (when configured) access token allow it.
+2. Binance public REST for XAUUSD → **PAXG/USDT** and BTCUSD → **BTC/USDT**. These are different markets, not spot XAU/USD or BTC/USD, and USDT is not USD. Forex EUR/USD has no Binance proxy. Proxy prices are polled, not streamed. Binance may be unavailable in some regions, including Vercel's deployment region.
+3. A deterministic **simulated demo feed** if no provider is available, or immediately when “Skip - Use Demo” is selected. Demo data has a yellow notice and watermark on both panes, is not actual market data, and is not for trading. Demo bid/ask is unavailable rather than invented. Its historical M5 bars are aggregated from the same synthetic M1 series; the browser generates subsequent demo ticks.
 
-The project currently has **no market-data credentials configured**, so both charts correctly show no data. The implementation uses Twelve Data, not MT5 or the broker's feed. Configure all of the following in Vercel for the desired Preview/Production environments, then redeploy:
+Data source and proxy instrument are exposed in `X-Chart-Source` and `X-Chart-Instrument` headers. `/api/chart/candles` and `/api/chart/price` choose a fallback automatically; passing `source=twelvedata|binance|demo` pins a source and returns an error instead of mixing sources. The client pins both panes and the price to one source, and switches both to demo if that source fails. `/api/chart/price` is a snapshot, not an atomic quote with either chart. All feeds can have gaps, delays and provider-specific pricing. The demo and proxy feeds do not verify or match MT5/broker pricing.
 
-- `TWELVE_DATA_API_KEY`: a server-only Twelve Data key with historical intraday and streaming entitlements for each desired instrument (XAU/USD, EUR/USD, BTC/USD). Provider plans, exchange selection, latency, history limits, bid/ask availability, usage limits and charges vary; verify them with the provider. Never use a `NEXT_PUBLIC_` prefix or enter this key in the browser or chat.
-- `CHART_ACCESS_TOKEN`: a long random value of at least 24 characters. Enter this **access token**, not the provider key, in the chart page. It stays in browser `sessionStorage` and is sent via authorization headers, not URLs. Anyone with the token can consume your provider credits; use Vercel access controls and appropriate distributed rate limiting / spending limits for broader access. This token is not a substitute for user authentication.
+To use Twelve Data, set `TWELVE_DATA_API_KEY` in Vercel with the relevant historical and streaming entitlements, then redeploy. `CHART_ACCESS_TOKEN` is **optional**: if set, it must be at least 24 characters, and the user enters it in the chart page; without a valid token the app uses the public proxy/demo instead of exposing the paid provider. If not set, anyone can consume the paid provider's quota. For production, set a token and additional access controls, distributed rate limits and spending limits. Never enter the provider key in the browser or chat. Vercel relays Twelve Data's WebSocket via same-origin SSE. If the stream fails or yields no initial tick within 15 seconds, the workspace switches to demo (including during quiet markets). Serverless execution, gaps, plan entitlements, latency, rate limits and fees remain provider-dependent. No real feed was verified in the test environment.
 
-The server fetches up to 500 provider candles per timeframe (`/api/chart/candles?symbol=XAUUSD&timeframe=M1`; use `before=<Unix seconds>` for earlier candles). Volume is `null` if the provider does not supply it. `/api/chart/price?symbol=XAUUSD` returns a provider REST snapshot with `bid`/`ask` null if not supplied; it is not an atomic snapshot of the charts. All three chart endpoints require the bearer token. `/api/chart/stream` keeps the provider key on the server: it connects to Twelve Data's WebSocket and relays ticks to the browser as same-origin SSE. The latest accepted tick drives the displayed ticker and M1 close; M5 is updated from the M1 candle. Bid and ask are shown only when supplied on that tick, without offsets.
+### Journal upload and privacy
 
-The stream reconnects periodically to fit serverless execution limits and refreshes history on reconnect. There can still be gaps between snapshots and subscriptions, provider delays, limited history, disconnected streams, and unverified exchange differences. A single user may consume a provider WebSocket connection and repeated REST requests; Twelve Data may limit concurrent connections. No 60 fps, gap-free, broker/MT5, TradingView price-parity or production streaming guarantee is claimed. The ticker reports its last tick time and becomes stale when no recent ticks arrive. Until a real entitled account is configured and tested, neither real-time updates nor live bid/ask accuracy has been verified.
+Upload a JSON array, an object with a `trades` array, or a recovery object whose `trades` field is itself a JSON-encoded array. A maximum of 10,000 trade objects and a 4 MB file are accepted. The selected file is sent to `/api/journal/upload` for transient validation; the server returns `{count, trades}` and does not intentionally store or log the journal. Network/platform logs or provider policies may still apply. The original JSON, including notes and screenshots, is stored **unencrypted in browser localStorage**, visible to anyone with access to that browser profile or same-origin scripts. Do not upload on a shared device. Use “Clear journal” to remove it. Storage quotas can prevent a large upload; the previous journal is retained on failure. “View Raw JSON” exposes the original upload on screen.
 
-### Journal markers
+The chart and monitor both show the browser's uploaded journal with filters and pagination. The Brain Learning Status shows upload count/time and a placeholder; no learning or performance metrics are computed from these records. In particular, the 40-record recovery export is not used as verified performance data. Outcome filters match recorded labels only, without reconciling inconsistent P/L. Row clicks navigate to the supported pair and entry time on both charts; date-only records highlight the start of the UTC day, explicitly marking the time unknown. On demo and proxy charts, selection uses a vertical time highlight only: recorded prices are not falsely plotted against unrelated simulated/proxy prices. A missing supported symbol/date or history outside the available range is reported rather than guessed.
 
-The optional JSON is read **only in the browser's memory**; it is not uploaded to this server, stored by the app or used for statistics. Clear it or reload to remove it. Supported input is an array or `{ "trades": [...] }`. A trade needs `symbol`, `side` (`BUY`/`SELL`), `entry_time`, and `entry_price`; optional `exit_time`, `exit_price` and numeric `pnl` add an exit label. Times must be Unix seconds/milliseconds or ISO 8601 strings with an explicit timezone. Common camelCase names and `direction`, `open_time`, `close_time`, `entry`, `exit`, and `profit` are also accepted. Incomplete or other-symbol trades are skipped, not guessed. Points are placed at the stated price and the containing candle's time; a marker is visible only when its time and price are within loaded chart data. This schema has not been tested against the user's future export.
+Drawings are stored separately in browser localStorage. Optional real-provider entry/exit markers are shown only with supported symbol, side, timestamp and price. They are not a trade feed and do not change the `mt5_connected=false` and `scanning=false` status.
 
 ```sh
 npm run build
-npm run test:chart  # local, test-only mocked provider; no real feed validation
+npm run test:chart  # test-only mocked providers and synthetic fixtures; not real feed verification
 ```
 
 ## Chart assessment
