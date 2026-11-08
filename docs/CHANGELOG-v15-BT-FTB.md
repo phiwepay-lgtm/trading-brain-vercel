@@ -32,3 +32,11 @@ Compile each `.pine` in TradingView and each `.mq5` in MetaEditor, inspect error
 ## Journal audit
 
 The confirmed recovery export has 40 records. Rows 14, 15 and 26 (one-based) are BUY records labeled VLB; they remain unresolved and unchanged. See `AUDIT-40records.txt` for counts and review limits. No raw trades, notes or screenshots are packaged. No performance claim is inferred from this journal.
+
+## Strategy sensitivity and debug settings
+
+The standalone v15 strategy now defaults to M5_Lookback 200, with the latest high/low allowed up to twice that age (400 M5 bars by default). Previous-pivot and FTB-expectation age checks still use M5_Lookback itself. FTB approach tolerance defaults to 50 ticks, and BT entry-close proximity to 0.382 defaults to 30 ticks; the BT fib-touch and FTB fib-bypass rules are unchanged. Tick size depends on the symbol.
+
+`Debug_M5` defaults on and shows the last available HA pivot high/low outside golden sessions; a plotted pivot is not necessarily an active HH/LL expectation. The Data Window's "count" plots are per-bar 1/NA flags, not cumulative counts. The panel shows HA index and high/low validity. Debug output does not enable the simulation or alter its session guards. These are sensitivity settings for investigation, not evidence of more correct setups or profitability.
+
+Only `TradingBrain_M5_M1_v15.pine` has these new defaults. The separately supplied indicator and both MQL drafts retain their earlier settings and can produce different candidates; they have not been updated for parity. Pine compilation remains unverified.
