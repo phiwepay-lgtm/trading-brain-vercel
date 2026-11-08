@@ -4,11 +4,14 @@ const brain = require('../data/brain.json');
 const summary = require('../data/journal_summary.json');
 
 test('brain contains the user-specified system and offline flags', () => {
-  assert.equal(brain.system_name, 'M5 BOS -> 0.382 -> M1 VLB + Engulf');
-  assert.equal(brain.htf, 'M5 BOS required');
+  assert.match(brain.system_name, /VLB sell \/ VHB buy/);
+  assert.match(brain.htf, /M5 structure confirmation/);
   assert.equal(brain.entry_zone, '0.382 fib retrace');
-  assert.deepEqual(brain.ltf_confirm, ['M1 Valid Liquidity Build', 'Engulfing']);
-  assert.equal(brain.risk, '0.5-1% , SL beyond VLB');
+  assert.match(brain.ltf_confirm.join(' '), /Visual Low Break for sells/);
+  assert.match(brain.ltf_confirm.join(' '), /Visual High Break for buys/);
+  assert.match(brain.ltf_confirm.join(' '), /Entry on the engulfing candle/);
+  assert.doesNotMatch(JSON.stringify(brain), /Valid Liquidity Build/);
+  assert.match(brain.risk, /distance not specified/);
   assert.equal(brain.mt5_connected, false);
   assert.equal(brain.scanning, false);
 });

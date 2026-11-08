@@ -3,6 +3,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { ColorType, createChart, CrosshairMode, type IChartApi, type ISeriesApi, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { ema, heikinAshi } from '../../lib/chart-math.mjs';
 import type { JournalMarker } from '../../lib/journal-markers';
+import { markerVisual } from '../../lib/setup-definitions.mjs';
 
 export type Bar = { time: number; open: number; high: number; low: number; close: number; volume: number | null };
 type Point = { time: number; price: number };
@@ -26,7 +27,8 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
   const seconds = timeframe === 'M5' ? 300 : 60, period = timeframe === 'M5' ? 21 : 9;
   const decimals = symbol === 'EURUSD' ? 5 : 2;
   const plotted = useMemo(() => { const available = new Set(bars.map(b => b.time)); return journalMarkers.map(m => ({...m, barTime:Math.floor(m.time / seconds)*seconds})).filter(m => available.has(m.barTime)).sort((a,b) => a.barTime-b.barTime || a.id.localeCompare(b.id)); }, [journalMarkers,bars,seconds]);
-  const tooltipMap = useRef(new Map<string,string>()); tooltipMap.current = new Map(plotted.map(m => [m.id,m.tooltip]));
+  const display = useMemo(() => ha ? heikinAshi(bars) as Bar[] : bars, [ha,bars]);
+  const barsByTime = useMemo(() => new Map(display.map(b=>[b.time,b])),[display]);
   const tooltipTimes = useRef(new Map<number,string[]>()); tooltipTimes.current = new Map(); for (const m of plotted) tooltipTimes.current.set(m.barTime, [...(tooltipTimes.current.get(m.barTime) ?? []),m.tooltip]);
 
   useEffect(() => { try { const val = JSON.parse(localStorage.getItem(storageKey) || '[]'); setShapes(Array.isArray(val) ? val.filter(x => x && typeof x.kind === 'string' && Number.isFinite(x.a?.time) && Number.isFinite(x.a?.price)).slice(0, 500) : []); } catch { setShapes([]); } }, [storageKey]);
@@ -49,9 +51,21 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
       else if (b && shape.kind === 'rectangle') { ctx.fillStyle = 'rgba(133,151,255,.10)'; ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y); ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y); }
       else if (b && shape.kind === 'fib') { [0, .236, .382, .5, .618, 1].forEach(level => { const y = a.y + (b.y - a.y) * level; ctx.beginPath(); ctx.moveTo(a.x, y); ctx.lineTo(b.x, y); ctx.stroke(); ctx.fillText(`${(level * 100).toFixed(level === .236 || level === .382 || level === .618 ? 1 : 0)}%`, Math.min(a.x, b.x) + 3, y - 3); }); }
     }
+    // Triangle positions use the displayed candle's high/low, not a recorded execution price.
+    const stacked = new Map<string,number>();
+    for (const m of plotted) {
+      const bar = barsByTime.get(m.barTime); if (!bar) continue;
+      const visual = markerVisual(m), p = xy({time:m.barTime, price:visual.position === 'belowBar' ? bar.low : bar.high});
+      if (!p || p.x < 0 || p.x > width - 60) continue;
+      const stackKey = `${m.barTime}:${m.side}`, offset = stacked.get(stackKey) ?? 0; stacked.set(stackKey,offset+1);
+      const up = visual.shape === 'triangleUp', y = p.y + (up ? 10 + offset*18 : -10 - offset*18);
+      ctx.fillStyle=visual.color; ctx.beginPath();
+      ctx.moveTo(p.x,y); ctx.lineTo(p.x-6,y+(up?10:-10)); ctx.lineTo(p.x+6,y+(up?10:-10)); ctx.closePath(); ctx.fill();
+      ctx.font='10px Inter, system-ui, sans-serif'; ctx.fillStyle='#cbd5e1'; ctx.fillText(m.label,p.x+9,y+(up?10:-3));
+    }
     if (focus) { const x = api.timeScale().timeToCoordinate((Math.floor(focus.time / seconds) * seconds) as UTCTimestamp); if (x !== null) { ctx.strokeStyle = '#ffd36f'; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height - 25); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#ffd36f'; ctx.font = 'bold 11px Inter, system-ui, sans-serif'; ctx.fillText(focus.approximate ? 'Journal date · time unknown' : 'Selected journal trade', Math.max(4, Math.min(x + 5, width - 165)), 42); } }
     for (const mark of markers) { const p = xy(mark); if (!p) continue; ctx.fillStyle = mark.color; ctx.font = 'bold 11px Inter, system-ui, sans-serif'; ctx.fillText(mark.label, p.x + 4, p.y - 6); ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); }
-  }, [shapes, anchor, hover, tool, markers, seconds, focus]);
+  }, [shapes, anchor, hover, tool, markers, seconds, focus, plotted, barsByTime]);
   const drawRef = useRef(draw); drawRef.current = draw;
 
   useEffect(() => {
@@ -61,9 +75,8 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
     const emaLine = api.addLineSeries({ color: timeframe === 'M5' ? '#5595ff' : '#f7cb58', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, priceFormat: { type: 'price', precision: decimals, minMove: Math.pow(10, -decimals) } });
     chart.current = api; candles.current = series; line.current = emaLine;
     api.subscribeCrosshairMove(param => {
-      const found = typeof param.hoveredObjectId === 'string' ? tooltipMap.current.get(param.hoveredObjectId) : undefined;
       const atTime = typeof param.time === 'number' ? tooltipTimes.current.get(param.time) : undefined;
-      const description = found || (atTime?.length ? atTime.slice(0,3).join(' • ') + (atTime.length > 3 ? ` • +${atTime.length - 3} more; see marker list` : '') : undefined);
+      const description = (atTime?.length ? atTime.slice(0,3).join(' • ') + (atTime.length > 3 ? ` • +${atTime.length - 3} more; see marker list` : '') : undefined);
       setTooltip(description && param.point ? {text:description,x:param.point.x,y:param.point.y} : null);
       const b = param.seriesData.get(series) as { open?: number; high?: number; low?: number; close?: number } | undefined;
       const e = param.seriesData.get(emaLine) as { value?: number } | undefined;
@@ -82,16 +95,16 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
 
   useEffect(() => {
     const api = chart.current, c = candles.current, l = line.current; if (!api || !c || !l) return;
-    const display = ha ? heikinAshi(bars) : bars; const values = ema(bars, period);
+    const values = ema(bars, period);
     const prev = previous.current;
     // Incremental updates preserve the viewport on each tick. A changed prefix requires a full reset.
     const incremental = prev && prev.ha === ha && prev.enabled === indicator && bars.length >= prev.bars.length && bars.length <= prev.bars.length + 1 && bars.length > 0 && prev.bars.length > 0 && bars[0] === prev.bars[0] && (prev.bars.length < 2 || bars[prev.bars.length - 2] === prev.bars[prev.bars.length - 2]);
     if (incremental) { c.update(display[display.length - 1] as any); if (indicator && values.length) l.update(values[values.length - 1] as any); }
     else { c.setData(display as any); l.setData(indicator ? values as any : []); if ((!prev || !prev.bars.length) && bars.length) { const selected = focus ? bars.findIndex(b => b.time === Math.floor(focus.time / seconds) * seconds) : -1; api.timeScale().setVisibleLogicalRange(selected >= 0 ? {from: Math.max(0, selected - 60), to: Math.min(bars.length + 5, selected + 60)} : { from: Math.max(0, bars.length - 120), to: bars.length + 5 }); } }
     previous.current = { bars, ha, enabled: indicator }; requestAnimationFrame(() => drawRef.current());
-  }, [bars, ha, indicator, period]);
+  }, [bars, display, ha, indicator, period]);
   useEffect(() => { draw(); }, [draw]);
-  useEffect(() => { candles.current?.setMarkers(plotted.map(m => ({time:m.barTime as UTCTimestamp, position:m.side === 'BUY' ? 'belowBar' : 'aboveBar', shape:m.side === 'BUY' ? 'arrowUp' : 'arrowDown', color:m.side === 'BUY' ? '#35ddb1' : '#ff7181', id:m.id}))); setTooltip(null); }, [plotted]);
+  useEffect(() => { setTooltip(null); }, [plotted]);
 
   useImperativeHandle(ref, () => ({
     crosshair(time, price) { const api = chart.current, c = candles.current; if (!api || !c) return; skipSync.current = true; if (time === null) api.clearCrosshairPosition(); else { const bucket = Math.floor(time / seconds) * seconds; if (barsRef.current.some(b => b.time === bucket)) api.setCrosshairPosition(price, bucket as UTCTimestamp, c); else api.clearCrosshairPosition(); } skipSync.current = false; },
