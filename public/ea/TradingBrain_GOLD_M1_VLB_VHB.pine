@@ -1,0 +1,25 @@
+//@version=5
+indicator("TradingBrain - GOLD M1 VLB/VHB - 40 Trades", overlay=true)
+// VLB = SELLs, VHB = BUYs (from 40Trades.json)
+// Best Setup: BT 0.382 & FTB 0.382
+// Best Hour: 17:00 NY
+// Plot logic:
+// - Detect M1 BOS/CHoCH breaks
+// - Plot VLB (bearish engulf at highs) as red triangle down for SELL
+// - Plot VHB (bullish engulf at lows) as green triangle up for BUY
+// - Plot BT 0.382 FVG zone
+// - NO strategy() calls, only indicator() - visual only, HOLD mode
+// - Show table: Total 40 Trades | Winrate | Avg R | PF 4.76
+
+// The statements above are user-provided, not independently verified. The
+// 40Trades.json file was not supplied to this script; it does not read a journal.
+// "Best" setup/hour and PF are claims, not measured results. The 17:00 NY
+// claim differs from an earlier proposed 14:00-16:00 NY filter; neither is verified.
+// This file is a comment-only skeleton. Detection, plots, FVG zones and the
+// table above are NOT implemented. It produces no trading signal or orders.
+// Earlier clarified definitions: VLB sells continue to a new lower low; VHB
+// buys continue to a new higher high after M5 confirmation. The highs/lows
+// wording above needs clarification before it can be coded as detection logic.
+// Study only; review manually. Not financial advice. Not compiled in TradingView.
+// A hidden placeholder satisfies the indicator's output requirement; no markers are plotted.
+plot(na, title="Placeholder - no signals", display=display.none)
