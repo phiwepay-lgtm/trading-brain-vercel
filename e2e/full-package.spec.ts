@@ -23,6 +23,11 @@ test('download center exports matching source files and unavailable stats withou
   const v15Download=page.waitForEvent('download');await page.getByRole('link',{name:'Download v15 Draft (.pine)'}).click();const v15=await v15Download;
   expect(v15.suggestedFilename()).toBe('TradingBrain_M5_M1_v15.pine');
   expect(await readFile((await v15.path())!,'utf8')).toContain('FTB_FOUND');
+  const v15ZipPending=page.waitForEvent('download');await page.getByRole('link',{name:'Download v15 Source Package (.zip)'}).click();const v15DownloadZip=await v15ZipPending;
+  expect(v15DownloadZip.suggestedFilename()).toBe('TradingBrain-v15-BT-FTB-Full.zip');
+  const v15Zip=await JSZip.loadAsync(await readFile((await v15DownloadZip.path())!));
+  expect(Object.values(v15Zip.files).filter(f=>!f.dir).map(f=>f.name).sort()).toEqual(['Docs/AUDIT-40records.txt','Docs/CHANGELOG-v15-BT-FTB.md','MQ5/TradingBrain_Tester_v15.mq5','MQ5/TradingBrain_v15.mq5','Pine/TradingBrain_Indicator_v15.pine','Pine/TradingBrain_M5_M1_v15.pine']);
+  expect(await v15Zip.file('Pine/TradingBrain_M5_M1_v15.pine')!.async('string')).toBe(await readFile((await v15.path())!,'utf8'));
   const zip=await packageDownload(page);
   expect(await zip.file('TradingBrain_Strategy.pine')!.async('string')).toBe(expectedStrategy);
   expect(await zip.file('TradingBrain_GOLD_M1_VLB_VHB.pine')!.async('string')).toBe(expectedPine);

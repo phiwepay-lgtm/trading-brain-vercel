@@ -2,3 +2,5 @@
 .ea-package{margin-top:18px}.ea-package-button{width:100%;justify-content:center;border:0;cursor:pointer;padding:14px}.ea-package-button:disabled{opacity:.6;cursor:not-allowed}.ea-package p{font-size:11px;line-height:1.5;color:#9fac9d;margin:9px 0}.ea-package a{color:#c9e7b7;text-decoration:underline}.ea-package-status:empty{display:none}
 .ea-file>div{min-width:0}.ea-file strong{overflow-wrap:anywhere}
 .strategy-badge{color:#c5ed90;font-weight:700;font-size:9px;letter-spacing:.04em}
+
+@media(max-width:760px){.ea-layout{grid-template-columns:minmax(0,1fr)}}
