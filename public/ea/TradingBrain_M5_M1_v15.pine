@@ -1,5 +1,5 @@
 //@version=5
-strategy("TradingBrain v15 - M5/M1 BT and FTB Draft", overlay=true, initial_capital=10000, commission_type=strategy.commission.percent, commission_value=0.02, pyramiding=0, calc_on_every_tick=false, process_orders_on_close=true)
+strategy("TradingBrain v15.1 - M5/M1 BT and FTB Draft", overlay=true, initial_capital=10000, commission_type=strategy.commission.percent, commission_value=0.02, pyramiding=0, calc_on_every_tick=false, process_orders_on_close=true)
 
 // STRUCTURAL STUDY ONLY. NOT fitted to the journal; no performance claims.
 // User-described Parts 1/2/3/4; exact visual pivots, session times and the
@@ -63,14 +63,40 @@ validHaPrevLow = not na(haPrevLow) and not na(haPrevLowIndex) and not na(haIndex
 validHaPrevHigh = not na(haPrevHigh) and not na(haPrevHighIndex) and not na(haIndex) and haIndex - haPrevHighIndex <= M5_Lookback
 // Part 3 BT bearish structure is a provisional Low -> LL -> LH pivot model.
 haBearStructure = validHaLow and validHaHigh and validHaPrevLow and validHaPrevHigh and haPrevLow > haSwingLow and haSwingHigh < haPrevHigh and haHighIndex > haLowIndex
-// PART 4 FTB - Failure to Break - HA colour shift + M5 close confirmation
-// Every newly observed, previously confirmed pivot can be an expectation;
-// no higher-high / lower-low comparison is required. The requested [1]
-// comparison is a one-M1-bar pulse, not a persistent pivot expectation.
+// PART 4 FTB: persist confirmed HA pivots across later M5 attempts. [2] data
+// was available before the completed signal candle; never use its new pivots.
 isNewHighPivot = not na(expectedHigh) and not na(expectedHighIndex) and (na(expectedHighIndex[1]) or expectedHighIndex != expectedHighIndex[1])
 isNewLowPivot = not na(expectedLow) and not na(expectedLowIndex) and (na(expectedLowIndex[1]) or expectedLowIndex != expectedLowIndex[1])
-expectingBullBOS = isNewHighPivot and not na(haIndex) and haIndex - expectedHighIndex <= M5_Lookback
-expectingBearBOS = isNewLowPivot and not na(haIndex) and haIndex - expectedLowIndex <= M5_Lookback
+var float activeExpectedHigh = na
+var int activeExpectedHighIndex = na
+var float activeExpectedLow = na
+var int activeExpectedLowIndex = na
+if newHaM5
+    // Update even outside trading sessions so a successful break is not missed.
+    // A newer opposite pivot replaces the old expectation; same-index ties
+    // leave both active and incompatible simultaneous signals remain suppressed.
+    if isNewHighPivot and (na(activeExpectedLowIndex) or expectedHighIndex >= activeExpectedLowIndex)
+        activeExpectedHigh := expectedHigh
+        activeExpectedHighIndex := expectedHighIndex
+        if not na(activeExpectedLowIndex) and expectedHighIndex > activeExpectedLowIndex
+            activeExpectedLow := na
+            activeExpectedLowIndex := na
+    if isNewLowPivot and (na(activeExpectedHighIndex) or expectedLowIndex >= activeExpectedHighIndex)
+        activeExpectedLow := expectedLow
+        activeExpectedLowIndex := expectedLowIndex
+        if not na(activeExpectedHighIndex) and expectedLowIndex > activeExpectedHighIndex
+            activeExpectedHigh := na
+            activeExpectedHighIndex := na
+    // A close through the level is a successful break, not an FTB. Expire only
+    // after the configured number of M5 bars, measured from the pivot index.
+    if not na(activeExpectedHighIndex) and (haIndex - activeExpectedHighIndex > M5_Lookback or haClose > activeExpectedHigh)
+        activeExpectedHigh := na
+        activeExpectedHighIndex := na
+    if not na(activeExpectedLowIndex) and (haIndex - activeExpectedLowIndex > M5_Lookback or haClose < activeExpectedLow)
+        activeExpectedLow := na
+        activeExpectedLowIndex := na
+expectingBullBOS = not na(activeExpectedHigh) and not na(activeExpectedHighIndex) and not na(haIndex) and haIndex - activeExpectedHighIndex <= M5_Lookback
+expectingBearBOS = not na(activeExpectedLow) and not na(activeExpectedLowIndex) and not na(haIndex) and haIndex - activeExpectedLowIndex <= M5_Lookback
 
 // PART 2 + PART 3: M1 confirmed pivots approximate visual structure. For a bullish CHoCH,
 // the last confirmed high must be lower than the preceding confirmed high;
@@ -92,8 +118,6 @@ var string state = "NO_SESSION"
 var int direction = 0
 var int usedHighPivot = na
 var int usedLowPivot = na
-var int usedFtbHighPivot = na
-var int usedFtbLowPivot = na
 var string setupType = "NONE"
 allowBT = Test_Mode == "Both" or Test_Mode == "BT Only (common)"
 allowFTB = Test_Mode == "Both" or Test_Mode == "FTB Only (my edge)"
@@ -110,15 +134,12 @@ var float chochLevel = na
 var int entryBar = na
 bullBos = isGoldenSession and newHaM5 and validHaHigh and haClose > haSwingHigh and (na(usedHighPivot) or haHighIndex != usedHighPivot)
 bearBos = isGoldenSession and newHaM5 and haBearStructure and haClose < haSwingLow and (na(usedLowPivot) or haLowIndex != usedLowPivot)
-// Part 4: high-pivot failure shifts bearish; low-pivot failure shifts bullish. A wick may
-// cross the level, but close must return to its failure side. "Colour shift"
-// means prior HA candle was opposite-coloured. With the option off, the signal
-// candle must still close in the shifting direction; no prior colour required.
-// Do not call a previously observed successful BT on the same pivot a failure.
-// Only BOS events observed in the enabled session are tracked; this is not a
-// full reconstruction of all prior breaks outside the session.
-failedHigh = isGoldenSession and Use_FTB and newHaM5 and expectingBullBOS and haHigh >= expectedHigh and haClose < expectedHigh and haClose < haOpen and (not Require_HA_Color_Shift or haPriorClose > haPriorOpen) and (na(usedHighPivot) or expectedHighIndex != usedHighPivot) and (na(usedFtbHighPivot) or expectedHighIndex != usedFtbHighPivot)
-failedLow = isGoldenSession and Use_FTB and newHaM5 and expectingBearBOS and haLow <= expectedLow and haClose > expectedLow and haClose > haOpen and (not Require_HA_Color_Shift or haPriorClose < haPriorOpen) and (na(usedLowPivot) or expectedLowIndex != usedLowPivot) and (na(usedFtbLowPivot) or expectedLowIndex != usedFtbLowPivot)
+// FTB requires an actual HA wick touch plus the specified 30-tick bound.
+// The bound alone would allow a near miss, so the exact-touch check is explicit.
+// By default the preceding HA candle must be opposite-coloured.
+ftbTolerance = 30 * syminfo.mintick
+failedHigh = isGoldenSession and Use_FTB and newHaM5 and expectingBullBOS and haHigh >= activeExpectedHigh - ftbTolerance and haHigh <= activeExpectedHigh + ftbTolerance and haHigh >= activeExpectedHigh and haClose < activeExpectedHigh and haClose < haOpen and (not Require_HA_Color_Shift or haPriorClose > haPriorOpen)
+failedLow = isGoldenSession and Use_FTB and newHaM5 and expectingBearBOS and haLow <= activeExpectedLow + ftbTolerance and haLow >= activeExpectedLow - ftbTolerance and haLow <= activeExpectedLow and haClose > activeExpectedLow and haClose > haOpen and (not Require_HA_Color_Shift or haPriorClose < haPriorOpen)
 
 // PART 1 / 2 / 3 / 4: ordered state machine. One event of each type per M1 bar, used for markers. State updates only on
 // confirmed bars. Same-bar reaction/CHoCH/entry are deliberately disallowed:
@@ -162,16 +183,12 @@ if barstate.isconfirmed
                 usedHighPivot := haHighIndex
             if bearBos
                 usedLowPivot := haLowIndex
-            if failedHigh
-                usedFtbHighPivot := expectedHighIndex
-            if failedLow
-                usedFtbLowPivot := expectedLowIndex
             // A bar indicating multiple incompatible events is not tradable.
             eventCount = (bullBos ? 1 : 0) + (bearBos ? 1 : 0) + (failedHigh ? 1 : 0) + (failedLow ? 1 : 0)
             ambiguous = eventCount != 1
             direction := ambiguous ? 0 : bullBos or failedLow ? 1 : -1
             setupType := ambiguous ? "NONE" : bullBos or bearBos ? "BT" : "FTB"
-            ftbLevel := setupType == "FTB" ? (failedHigh ? expectedHigh : expectedLow) : na
+            ftbLevel := setupType == "FTB" ? (failedHigh ? activeExpectedHigh : activeExpectedLow) : na
             markFtbHigh := not ambiguous and failedHigh
             markFtbLow := not ambiguous and failedLow
             // BT anchors preserved from v14, but both now use HA M5. Bearish
@@ -246,10 +263,10 @@ plot(isM1 and isStandard and validHaHigh ? haSwingHigh : na, title="Confirmed M5
 plot(isM1 and isStandard and validHaLow ? haSwingLow : na, title="Confirmed M5 HA swing low (provisional pivot)", color=color.new(color.green, 30), style=plot.style_stepline)
 plot(isGoldenSession ? fib0382 : na, title="Candidate 0.382 level", color=color.orange, linewidth=3, style=plot.style_linebr)
 plot(isGoldenSession ? chochLevel : na, title="CHoCH break level - VHB buy / VLB sell", color=color.aqua, linewidth=2, style=plot.style_linebr)
-// Debug pivot levels remain visible outside golden sessions when enabled.
-// A plotted pivot is not necessarily an active HH/LL expectation.
-plot(Debug_M5 and isM1 and isStandard ? expectedHigh : na, title="Debug HA pivot high (expected candidate)", color=color.new(color.red, 30), style=plot.style_linebr)
-plot(Debug_M5 and isM1 and isStandard ? expectedLow : na, title="Debug HA pivot low (expected candidate)", color=color.new(color.green, 30), style=plot.style_linebr)
+// Active FTB levels remain visible outside golden sessions when enabled.
+// HA levels are synthetic and not guaranteed executable market prices.
+plot(Debug_M5 and isM1 and isStandard ? activeExpectedHigh : na, title="Debug active HA pivot high", color=color.new(color.red, 30), style=plot.style_linebr)
+plot(Debug_M5 and isM1 and isStandard ? activeExpectedLow : na, title="Debug active HA pivot low", color=color.new(color.green, 30), style=plot.style_linebr)
 // These are 1/NA state flags per bar, not cumulative event counts.
 plot(Debug_M5 and expectingBullBOS ? 1 : na, title="Expecting Bull BOS count", display=display.data_window)
 plot(Debug_M5 and expectingBearBOS ? 1 : na, title="Expecting Bear BOS count", display=display.data_window)
