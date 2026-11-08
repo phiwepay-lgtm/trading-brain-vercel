@@ -8,15 +8,16 @@ import { markerVisual } from '../../lib/setup-definitions.mjs';
 export type Bar = { time: number; open: number; high: number; low: number; close: number; volume: number | null };
 type Point = { time: number; price: number };
 type Shape = { id: string; kind: string; a: Point; b?: Point; text?: string };
-export type Marker = { time: number; price: number; label: string; color: string };
+export type Marker = { time: number; price: number; label: string; color: string; shape?: 'above' | 'below' };
+type ActiveLevel = {price:number;label:string;color:string};
 type PaneHandle = { crosshair: (time: number | null, price: number) => void; range: (range: { from: Time; to: Time }) => void; copyDrawings: () => Shape[]; addDrawings: (drawings: Shape[]) => void; screenshot: () => void };
-type Props = { source: string; focus: {time: number; approximate: boolean} | null; symbol: string; timeframe: 'M1' | 'M5'; bars: Bar[]; markers: Marker[]; journalMarkers: JournalMarker[]; onCrosshair: (source: string, time: number | null, price: number) => void; onRange: (source: string, range: { from: Time; to: Time }) => void; onHistory: () => void; hasMore: boolean; loadingMore: boolean; onCopy?: () => void };
+type Props = { source: string; focus: {time: number; approximate: boolean} | null; symbol: string; timeframe: 'M1' | 'M5'; bars: Bar[]; overlayBars?: Bar[]; markers: Marker[]; activeLevels?: ActiveLevel[]; sessionTimes?: Set<number>; journalMarkers: JournalMarker[]; onCrosshair: (source: string, time: number | null, price: number) => void; onRange: (source: string, range: { from: Time; to: Time }) => void; onHistory: () => void; hasMore: boolean; loadingMore: boolean; onCopy?: () => void };
 const tools = [['cursor', '↖', 'Cursor'], ['trend', '╱', 'Trendline'], ['horizontal', '━', 'Horizontal line'], ['fib', '≋', 'Fibonacci'], ['rectangle', '▭', 'Rectangle'], ['text', 'T', 'Text'], ['eraser', '⌫', 'Eraser']];
 const colors = { upColor: '#26c7a2', downColor: '#f46d7b', borderUpColor: '#26c7a2', borderDownColor: '#f46d7b', wickUpColor: '#26c7a2', wickDownColor: '#f46d7b' };
 
-const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, focus, symbol, timeframe, bars, markers, journalMarkers, onCrosshair, onRange, onHistory, hasMore, loadingMore, onCopy }, ref) {
+const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, focus, symbol, timeframe, bars, overlayBars, markers, activeLevels = [], sessionTimes, journalMarkers, onCrosshair, onRange, onHistory, hasMore, loadingMore, onCopy }, ref) {
   const host = useRef<HTMLDivElement>(null), overlay = useRef<HTMLCanvasElement>(null);
-  const chart = useRef<IChartApi | null>(null), candles = useRef<ISeriesApi<'Candlestick'> | null>(null), line = useRef<ISeriesApi<'Line'> | null>(null);
+  const chart = useRef<IChartApi | null>(null), candles = useRef<ISeriesApi<'Candlestick'> | null>(null), line = useRef<ISeriesApi<'Line'> | null>(null), overlayCandles = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const barsRef = useRef(bars), hooks = useRef({ onCrosshair, onRange, onHistory }), skipSync = useRef(false), suppressRange = useRef(false), rangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null), previous = useRef<{ bars: Bar[]; ha: boolean; enabled: boolean } | null>(null);
   const [ha, setHa] = useState(timeframe === 'M5'), [indicator, setIndicator] = useState(true), [tool, setTool] = useState('cursor');
   const [shapes, setShapes] = useState<Shape[]>([]), [anchor, setAnchor] = useState<Point | null>(null), [hover, setHover] = useState<Point | null>(null);
@@ -41,6 +42,11 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
     const ctx = canvas.getContext('2d'); if (!ctx) return; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, width, height);
     const xy = (p: Point) => { const x = api.timeScale().timeToCoordinate((Math.floor(p.time / seconds) * seconds) as UTCTimestamp), y = series.priceToCoordinate(p.price); return x === null || y === null ? null : { x, y }; };
+    if (sessionTimes?.size) {
+      const visible=api.timeScale().getVisibleRange(), from=typeof visible?.from==='number'?visible.from:-Infinity, to=typeof visible?.to==='number'?visible.to:Infinity;
+      ctx.fillStyle='rgba(55, 164, 156, 0.10)'; const spacing=api.timeScale().options().barSpacing;
+      for (const b of bars) if (b.time>=from && b.time<=to && sessionTimes.has(b.time)) {const x=api.timeScale().timeToCoordinate(b.time as UTCTimestamp);if(x!==null)ctx.fillRect(x-spacing/2,0,spacing,height-25);}
+    }
     ctx.lineWidth = 1.4; ctx.font = '11px Inter, system-ui, sans-serif';
     for (const shape of [...shapes, ...(anchor && hover ? [{ id: 'preview', kind: tool, a: anchor, b: hover }] : [])]) {
       const a = shape.kind === 'horizontal' ? { x: 0, y: series.priceToCoordinate(shape.a.price) } : xy(shape.a), b = shape.b && xy(shape.b); if (!a || a.y === null) continue;
@@ -64,8 +70,9 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
       ctx.font='10px Inter, system-ui, sans-serif'; ctx.fillStyle='#cbd5e1'; ctx.fillText(m.label,p.x+9,y+(up?10:-3));
     }
     if (focus) { const x = api.timeScale().timeToCoordinate((Math.floor(focus.time / seconds) * seconds) as UTCTimestamp); if (x !== null) { ctx.strokeStyle = '#ffd36f'; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height - 25); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#ffd36f'; ctx.font = 'bold 11px Inter, system-ui, sans-serif'; ctx.fillText(focus.approximate ? 'Journal date · time unknown' : 'Selected journal trade', Math.max(4, Math.min(x + 5, width - 165)), 42); } }
-    for (const mark of markers) { const p = xy(mark); if (!p) continue; ctx.fillStyle = mark.color; ctx.font = 'bold 11px Inter, system-ui, sans-serif'; ctx.fillText(mark.label, p.x + 4, p.y - 6); ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); }
-  }, [shapes, anchor, hover, tool, markers, seconds, focus, plotted, barsByTime]);
+    for (const level of activeLevels) { const y=series.priceToCoordinate(level.price); if (y === null) continue; ctx.strokeStyle=level.color;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(width-65,y);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=level.color;ctx.font='10px Inter, system-ui, sans-serif';ctx.fillText(level.label,8,y-4); }
+    for (const mark of markers) { const p = xy(mark); if (!p || p.x<0 || p.x>width-60) continue; ctx.fillStyle = mark.color; ctx.font = 'bold 10px Inter, system-ui, sans-serif'; ctx.beginPath(); if (mark.shape) { const d=mark.shape==='above'?-1:1, y=p.y+d*6;ctx.moveTo(p.x,y);ctx.lineTo(p.x-4,y+d*7);ctx.lineTo(p.x+4,y+d*7);ctx.closePath();ctx.fill();ctx.fillText(mark.label,p.x+6,y+d*8); } else {ctx.fillText(mark.label,p.x+4,p.y-6);ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();} }
+  }, [shapes, anchor, hover, tool, markers, activeLevels, sessionTimes, bars, seconds, focus, plotted, barsByTime]);
   const drawRef = useRef(draw); drawRef.current = draw;
 
   useEffect(() => {
@@ -73,7 +80,8 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
     const api = createChart(host.current, { autoSize: true, layout: { background: { type: ColorType.Solid, color: '#101722' }, textColor: '#94a3b8', fontFamily: 'Inter, system-ui, sans-serif' }, grid: { vertLines: { color: '#1c2837' }, horzLines: { color: '#1c2837' } }, crosshair: { mode: CrosshairMode.Normal }, rightPriceScale: { borderColor: '#29394b' }, timeScale: { borderColor: '#29394b', timeVisible: true, secondsVisible: false }, localization: { locale: 'en-US' } });
     const series = api.addCandlestickSeries({ ...colors, priceFormat: { type: 'price', precision: decimals, minMove: Math.pow(10, -decimals) }, lastValueVisible: true });
     const emaLine = api.addLineSeries({ color: timeframe === 'M5' ? '#5595ff' : '#f7cb58', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, priceFormat: { type: 'price', precision: decimals, minMove: Math.pow(10, -decimals) } });
-    chart.current = api; candles.current = series; line.current = emaLine;
+    const overlaySeries = timeframe === 'M1' ? api.addCandlestickSeries({upColor:'rgba(38,199,162,0.30)',downColor:'rgba(244,109,123,0.30)',borderUpColor:'rgba(38,199,162,0.45)',borderDownColor:'rgba(244,109,123,0.45)',wickUpColor:'rgba(38,199,162,0.45)',wickDownColor:'rgba(244,109,123,0.45)',lastValueVisible:false,priceLineVisible:false}) : null;
+    chart.current = api; candles.current = series; line.current = emaLine; overlayCandles.current = overlaySeries;
     api.subscribeCrosshairMove(param => {
       const atTime = typeof param.time === 'number' ? tooltipTimes.current.get(param.time) : undefined;
       const description = (atTime?.length ? atTime.slice(0,3).join(' • ') + (atTime.length > 3 ? ` • +${atTime.length - 3} more; see marker list` : '') : undefined);
@@ -87,11 +95,13 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
       hooks.current.onCrosshair(timeframe, typeof param.time === 'number' ? param.time : null, price ?? 0);
     });
     api.timeScale().subscribeVisibleTimeRangeChange(range => { drawRef.current(); if (!skipSync.current && !suppressRange.current && range) hooks.current.onRange(timeframe, range); });
-    api.timeScale().subscribeVisibleLogicalRangeChange(range => { if (range && range.from < 40) hooks.current.onHistory(); drawRef.current(); });
+    api.timeScale().subscribeVisibleLogicalRangeChange(range => { if (range && range.from < 40 && !suppressRange.current) hooks.current.onHistory(); drawRef.current(); });
     const redraw = () => requestAnimationFrame(() => drawRef.current());
     const el = host.current; el.addEventListener('pointermove', redraw); el.addEventListener('wheel', redraw); const resize = new ResizeObserver(redraw); resize.observe(el);
-    return () => { el.removeEventListener('pointermove', redraw); el.removeEventListener('wheel', redraw); resize.disconnect(); if (rangeTimer.current) clearTimeout(rangeTimer.current); chart.current = null; candles.current = null; line.current = null; api.remove(); };
+    return () => { el.removeEventListener('pointermove', redraw); el.removeEventListener('wheel', redraw); resize.disconnect(); if (rangeTimer.current) clearTimeout(rangeTimer.current); chart.current = null; candles.current = null; line.current = null; overlayCandles.current = null; api.remove(); };
   }, [timeframe, decimals]);
+
+  useEffect(() => { overlayCandles.current?.setData((overlayBars ?? []) as any); },[overlayBars]);
 
   useEffect(() => {
     const api = chart.current, c = candles.current, l = line.current; if (!api || !c || !l) return;
@@ -100,7 +110,16 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
     // Incremental updates preserve the viewport on each tick. A changed prefix requires a full reset.
     const incremental = prev && prev.ha === ha && prev.enabled === indicator && bars.length >= prev.bars.length && bars.length <= prev.bars.length + 1 && bars.length > 0 && prev.bars.length > 0 && bars[0] === prev.bars[0] && (prev.bars.length < 2 || bars[prev.bars.length - 2] === prev.bars[prev.bars.length - 2]);
     if (incremental) { c.update(display[display.length - 1] as any); if (indicator && values.length) l.update(values[values.length - 1] as any); }
-    else { c.setData(display as any); l.setData(indicator ? values as any : []); if ((!prev || !prev.bars.length) && bars.length) { const selected = focus ? bars.findIndex(b => b.time === Math.floor(focus.time / seconds) * seconds) : -1; api.timeScale().setVisibleLogicalRange(selected >= 0 ? {from: Math.max(0, selected - 60), to: Math.min(bars.length + 5, selected + 60)} : { from: Math.max(0, bars.length - 120), to: bars.length + 5 }); } }
+    else {
+      // Prepending history replaces the series. Keep the visible *time* range,
+      // not logical indices, and avoid syncing a transient range to the other pane.
+      const visible = prev?.bars.length ? api.timeScale().getVisibleRange() : null;
+      suppressRange.current = true; if (rangeTimer.current) clearTimeout(rangeTimer.current);
+      c.setData(display as any); l.setData(indicator ? values as any : []);
+      if (visible && bars.length) api.timeScale().setVisibleRange(visible);
+      else if ((!prev || !prev.bars.length) && bars.length) { const selected = focus ? bars.findIndex(b => b.time === Math.floor(focus.time / seconds) * seconds) : -1; api.timeScale().setVisibleLogicalRange(selected >= 0 ? {from: Math.max(0, selected - 60), to: Math.min(bars.length + 5, selected + 60)} : { from: Math.max(0, bars.length - 120), to: bars.length + 5 }); }
+      rangeTimer.current = setTimeout(() => { suppressRange.current = false; }, 150);
+    }
     previous.current = { bars, ha, enabled: indicator }; requestAnimationFrame(() => drawRef.current());
   }, [bars, display, ha, indicator, period]);
   useEffect(() => { draw(); }, [draw]);

@@ -24,7 +24,7 @@ test('hypothetical optimizer, tooltip, exporter and classified chart markers', a
   expect(download.suggestedFilename()).toBe('trading-system.txt');expect(await readFile((await download.path())!,'utf8')).toContain('selected hypothetical target');
   const vlb=page.getByRole('button',{name:'Filter By execution VLB + Engulf Trigger'});await vlb.focus();await expect(page.getByLabel('By execution').getByRole('tooltip')).toContainText('M1 BOS/CHoCH breaks low');
   const vhb=page.getByRole('button',{name:'Filter By execution VHB + Engulf Trigger'});await vhb.hover();await expect(page.getByLabel('By execution').getByRole('tooltip')).toContainText('pullback (sometimes none)');
-  await page.getByRole('link',{name:'Chart workspace'}).click();await page.getByRole('button',{name:'Skip - Use Demo'}).click();
+  await page.getByRole('link',{name:'Chart workspace'}).click();await page.getByLabel('SYMBOL').selectOption('XAUUSD');await page.getByRole('button',{name:'Skip - Use Demo'}).click();
   await expect(page.getByText(/1 direction conflicts/)).toBeVisible();
   await page.getByLabel('M1 trade markers').click();const list=page.locator('.marker-list[open]');
   await expect(list).toContainText('VLB Sell - BOS low + Engulf to new LL');await expect(list).toContainText('VHB Buy - BOS high + Engulf to new HH');await expect(list).toContainText('FTB - Failed to break new structure then continue');await expect(list).toContainText('Direction conflict - BUY / VLB');await expect(list).toContainText('recorded label; not pattern-verified');

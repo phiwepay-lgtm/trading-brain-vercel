@@ -21,10 +21,12 @@ test('client-only unverified statistics, breakdown filters and synchronized trad
   await brain.getByRole('button',{name:'Filter By session / hour new-york · 14:00'}).click();await expect(page.getByText('30 matching')).toBeVisible();
   await brain.getByRole('button',{name:'Filter By setup BT 0.382'}).click();await expect(page.getByText('30 matching')).toBeVisible();
   await page.getByRole('link',{name:'Chart workspace'}).click();await expect(page).toHaveURL(/\/chart$/);
-  await page.getByRole('button',{name:'Skip - Use Demo'}).click();await expect(page.getByRole('status')).toContainText('Using demo feed');
+  await page.getByLabel('SYMBOL').selectOption('XAUUSD');await page.getByRole('button',{name:'Skip - Use Demo'}).click();await expect(page.getByRole('status')).toContainText('Using demo feed');
   await expect(page.getByText(/30 filtered journal records/)).toBeVisible();
+  await expect(page.getByText(/Research history loaded|Provider returned less than|Some research history could not be loaded/)).toBeVisible();
   await expect(page.getByLabel('M1 trade markers')).toContainText('30 trade markers');await expect(page.getByLabel('M5 trade markers')).toContainText('30 trade markers');
-  // Locate an actual rendered buy triangle by its marker color, then exercise its hover tooltip.
+  // Check a rendered buy marker, then hover chart candles to exercise the journal tooltip.
+  await page.getByLabel('M1 chart').locator('.chart-host').scrollIntoViewIfNeeded();
   const box = await page.getByLabel('M1 chart').locator('.chart-host').boundingBox();
   expect(box).not.toBeNull();
   const image = (await page.screenshot()).toString('base64');
@@ -34,12 +36,16 @@ test('client-only unverified statistics, breakdown filters and synchronized trad
     const ctx=canvas.getContext('2d')!;ctx.drawImage(img,0,0);const pixels=ctx.getImageData(0,0,img.width,img.height).data;
     let first: {x:number;y:number}|null=null;
     for(let y=Math.ceil(box.y);y<Math.min(img.height,box.y+box.height-40)&&!first;y++) for(let x=Math.ceil(box.x);x<Math.min(img.width,box.x+box.width-70);x++) {const i=(y*img.width+x)*4;if(pixels[i]===53&&pixels[i+1]===221&&pixels[i+2]===177){first={x,y};break;}}
-    if (!first) return null;
-    const pts=[];for(let y=Math.max(0,first.y-12);y<Math.min(img.height,first.y+14);y++)for(let x=Math.max(0,first.x-12);x<Math.min(img.width,first.x+14);x++){const i=(y*img.width+x)*4;if(pixels[i]===53&&pixels[i+1]===221&&pixels[i+2]===177)pts.push({x,y});}
-    return {x:pts.reduce((sum,p)=>sum+p.x,0)/pts.length,y:pts.reduce((sum,p)=>sum+p.y,0)/pts.length};
+    return first;
   },{image,box:box!});
-  expect(point).not.toBeNull(); await page.mouse.move(point!.x,point!.y);
-  await expect(page.getByRole('tooltip').first()).toContainText('BT 0.382');
+  expect(point).not.toBeNull();
+  const tooltip=page.getByLabel('M1 chart').locator('.marker-tooltip'); let found=false;
+  for(let x=box!.x+5;x<box!.x+box!.width-70;x+=3) {
+    await page.mouse.move(x,box!.y+box!.height/2);
+    if(await tooltip.isVisible() && (await tooltip.innerText()).includes('BT 0.382')) {found=true;break;}
+  }
+  expect(found).toBe(true);
+  await expect(tooltip).toContainText('BT 0.382');
   await page.getByLabel('M1 trade markers').click();await expect(page.locator('.marker-list[open]')).toContainText('BT 0.382 | P/L');await expect(page.locator('.marker-list[open]')).toContainText('2.00R | Full TP');
   await page.getByRole('button',{name:'Show My Trades on'}).click();await expect(page.getByLabel('M1 trade markers')).toContainText('0 trade markers');await expect(page.getByLabel('M5 trade markers')).toContainText('0 trade markers');
   await page.getByRole('button',{name:'Show My Trades off'}).click();await expect(page.getByLabel('M1 trade markers')).toContainText('30 trade markers');
