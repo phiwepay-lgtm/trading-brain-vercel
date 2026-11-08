@@ -1,0 +1,95 @@
+//@version=5
+indicator("TradingBrain M5 - Part 1 Structure Draft", overlay=true)
+
+// M5 background only: NO M1 entries, orders, alerts or live bridge.
+// User-described Part 1; exact pivot definition, session times/timezones and
+// bearish fib anchor/direction still need user confirmation. Not performance proof.
+// Pivot left/right are configurable implementation assumptions, NOT verified
+// swing rules. Pivots require right-hand bars and are known only once confirmed.
+// Use on M1 or M5. Completed M5 events are processed at chart-bar close, so M1
+// displays them after the first M1 bar of the next M5 interval; M5 is one bar later.
+Enable_Background = input.bool(false, "Enable M5 background draft (OFF by default)")
+Swing_Lookback = input.int(50, "Max age of confirmed M5 pivots (bars)", minval=2, maxval=1000)
+Pivot_Left = input.int(2, "M5 pivot left bars (provisional)", minval=1, maxval=50)
+Pivot_Right = input.int(2, "M5 pivot right bars (provisional)", minval=1, maxval=50)
+NQ_Session = input.session("0930-1600", "New York session (proposed)")
+NQ_Timezone = input.string("America/New_York", "New York timezone (proposed IANA)")
+Asian_Session = input.session("0100-0600", "Asian session (proposed)")
+Asian_Timezone = input.string("Etc/UTC", "Asian timezone (proposed IANA)")
+Sessions_Confirmed = input.bool(false, "I confirmed the session times and timezones")
+
+// Sessions are dynamic series booleans, not `var` values frozen on the first bar.
+// The time windows apply to the chart bar's OPEN, not necessarily its full span.
+// Timezone strings must be valid TradingView/IANA timezone names.
+supportedTF = timeframe.isminutes and (timeframe.multiplier == 1 or timeframe.multiplier == 5)
+isNQ = supportedTF and not na(time(timeframe.period, NQ_Session, NQ_Timezone))
+isAsian = supportedTF and not na(time(timeframe.period, Asian_Session, Asian_Timezone))
+isGolden = Enable_Background and Sessions_Confirmed and (isNQ or isAsian)
+
+// Evaluate pivots and their ages in M5, using only the last COMPLETED M5 bar.
+// The valuewhen index identifies the pivot candle, not the later confirmation bar.
+// A confirmed pivot is a provisional approximation of the user's swing: input
+// values and lookback age need confirmation against annotated examples.
+f_completedM5() =>
+    ph = ta.pivothigh(high, Pivot_Left, Pivot_Right)
+    pl = ta.pivotlow(low, Pivot_Left, Pivot_Right)
+    swingHigh = ta.valuewhen(not na(ph), ph, 0)
+    swingLow = ta.valuewhen(not na(pl), pl, 0)
+    highPivotIndex = ta.valuewhen(not na(ph), bar_index - Pivot_Right, 0)
+    lowPivotIndex = ta.valuewhen(not na(pl), bar_index - Pivot_Right, 0)
+    [time[1], bar_index[1], high[1], low[1], close[1], swingHigh[1], swingLow[1], highPivotIndex[1], lowPivotIndex[1]]
+[m5Time, m5Index, m5High, m5Low, m5Close, lastSwingHigh, lastSwingLow, highPivotIndex, lowPivotIndex] = request.security(syminfo.tickerid, "5", f_completedM5(), lookahead=barmerge.lookahead_on)
+newM5 = supportedTF and barstate.isconfirmed and not na(m5Time) and (na(m5Time[1]) or m5Time != m5Time[1])
+hasHigh = not na(lastSwingHigh) and not na(highPivotIndex) and not na(m5Index) and m5Index - highPivotIndex <= Swing_Lookback
+hasLow = not na(lastSwingLow) and not na(lowPivotIndex) and not na(m5Index) and m5Index - lowPivotIndex <= Swing_Lookback
+
+// One BOS event per confirmed pivot. Updating pivots/seeing an opposite BOS can
+// replace the active setup; this is provisional state management for Part 1.
+var int usedHighPivot = na
+var int usedLowPivot = na
+var string setupState = "NO_BOS"
+var string bosDirection = "NONE"
+var float bosHigh = na
+var float bosLow = na
+var float fibHigh = na
+var float fibLow = na
+var float fib0382 = na
+bullBos = Enable_Background and newM5 and hasHigh and m5Close > lastSwingHigh and (na(usedHighPivot) or highPivotIndex != usedHighPivot)
+bearBos = Enable_Background and newM5 and hasLow and m5Close < lastSwingLow and (na(usedLowPivot) or lowPivotIndex != usedLowPivot)
+if bullBos or bearBos
+    if bullBos
+        usedHighPivot := highPivotIndex
+    if bearBos
+        usedLowPivot := lowPivotIndex
+    bosDirection := bullBos and bearBos ? "AMBIGUOUS" : bullBos ? "BULL" : "BEAR"
+    bosHigh := m5High
+    bosLow := hasLow ? lastSwingLow : na
+    // User's proposed same low-to-high anchors for both directions. The bearish
+    // meaning is unresolved: the break is below a low, while the described fib
+    // also mentions a newly formed HH and a downward retrace. Never infer an entry.
+    fibLow := bosLow
+    fibHigh := bosHigh
+    validAnchors = not na(fibLow) and not na(fibHigh) and fibHigh > fibLow and bosDirection != "AMBIGUOUS"
+    fib0382 := validAnchors ? fibHigh - (fibHigh - fibLow) * 0.382 : na
+    setupState := validAnchors ? "WAITING_0382" : "WAITING_ANCHORS"
+
+// Track structure irrespective of session; a future entry module MUST require
+// isGolden. No entry module is present, even after a 0.382 level is reached.
+// The level is a proposed 38.2% retracement measured DOWN from the high.
+// No touch/confirmation transition is assumed before the user supplies Part 2.
+plot(Enable_Background and supportedTF ? fib0382 : na, title="Proposed 0.382 retracement (unconfirmed)", color=color.orange, linewidth=2, style=plot.style_stepline)
+bgcolor(isGolden ? color.new(color.teal, 92) : na, title="Confirmed golden session")
+plotshape(bullBos, title="Bull M5 pivot breakout candidate", text="BOS+?", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.tiny)
+plotshape(bearBos, title="Bear M5 pivot breakout candidate", text="BOS-?", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.tiny)
+var table panel = table.new(position.top_right, 2, 5, border_width=1)
+if barstate.islast
+    table.cell(panel, 0, 0, "M5 PART 1", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 0, not Enable_Background ? "OFF" : not supportedTF ? "USE M1 OR M5" : "DRAFT / NO ENTRIES", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 1, "Session", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 1, not Sessions_Confirmed ? "UNCONFIRMED" : isGolden ? "GOLDEN" : "OUTSIDE", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 2, "Structure", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 2, bosDirection, text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 3, "State", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 3, setupState, text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 4, "0.382 candidate", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 4, na(fib0382) ? "UNAVAILABLE" : str.tostring(fib0382, format.mintick) + (bosDirection == "BEAR" ? " BEAR?" : " ?"), text_color=color.white, bgcolor=color.black)
