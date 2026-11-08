@@ -61,7 +61,7 @@ unverified journal data, not brokerage performance or a tested strategy. The
 filter; neither is verified. The R:R slider is hypothetical, not a backtest.
 Demo and Binance proxy prices are not live market execution.
 
-PR12 SEPARATE TRADINGVIEW STRATEGY (SIMULATED ONLY)
+PR12 LEGACY PROXY TRADINGVIEW STRATEGY (SIMULATED ONLY)
 1. Paste TradingBrain_Strategy.pine into Pine Editor, save and add to an M1
    GOLD chart. The PR11 indicator is unchanged. Enable_Backtest is false by
    default. Turn it on only for research after reviewing the code. Set UTC
@@ -110,3 +110,18 @@ the message. Do not send private data or credentials. A capture URL is not an
 MT5 bridge, and webhook.site is not a secure trade relay. A file-based bridge
 would likewise need a separate service to authenticate, validate, deduplicate
 and write messages and a separate MT5 reader; neither component exists here.
+
+V14 M5/M1 STRUCTURE DRAFT (SEPARATE DOWNLOAD, NOT IN THIS ZIP)
+TradingBrain_M5_M1_v14.pine is available separately from the Download Center.
+It is disabled by default and uses provisional confirmed M5/M1 pivots, an
+M5 breakout, candidate 0.382 touch and M1 CHoCH/engulfing sequence. Bearish
+M5 uses synthetic Heikin Ashi data; bullish M5 uses normal data provisionally.
+Sessions, pivots and identification of bearish anchors require confirmation. No rules have been
+validated against the 40 records or compiled in TradingView. It uses standard
+M1 bars only, contains no MT5 bridge and makes no profitability claims.
+
+V15 BT / FTB STUDY (SEPARATE DOWNLOAD, NOT IN THIS ZIP)
+TradingBrain_M5_M1_v15.pine is disabled by default and uses completed M5
+Heikin Ashi for both directions. FTB candidates go directly to M1 CHoCH
+without the BT 0.382 gate. Pivot/colour choices, sessions and swing anchors
+need confirmation. Pine compilation and backtesting have not been verified.
