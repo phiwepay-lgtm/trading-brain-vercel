@@ -6,7 +6,7 @@ async function packageDownload(page: import('@playwright/test').Page) {
   const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download Full Package (ZIP)'}).click();
   const download=await pending;expect(download.suggestedFilename()).toBe('TradingBrain_Full_Package.zip');
   const zip=await JSZip.loadAsync(await readFile((await download.path())!));
-  expect(Object.keys(zip.files).sort()).toEqual(['README.txt','TradingBrain.mq5','TradingBrain_GOLD_M1_VLB_VHB.pine','system.json']);
+  expect(Object.keys(zip.files).sort()).toEqual(['README.txt','TradingBrain.mq5','TradingBrain_GOLD_M1_VLB_VHB.pine','TradingBrain_Strategy.pine','system.json']);
   return zip;
 }
 test('download center exports matching source files and unavailable stats without a journal',async({page,request})=>{
@@ -14,7 +14,11 @@ test('download center exports matching source files and unavailable stats withou
   const pineDownload=page.waitForEvent('download');await page.getByRole('link',{name:'Download Pine Script (.pine)'}).click();const pine=await pineDownload;
   expect(pine.suggestedFilename()).toBe('TradingBrain_GOLD_M1_VLB_VHB.pine');
   const expectedPine=await readFile((await pine.path())!,'utf8');
+  const strategyDownload=page.waitForEvent('download');await page.getByRole('link',{name:'Download Strategy (.pine)'}).click();const strategy=await strategyDownload;
+  expect(strategy.suggestedFilename()).toBe('TradingBrain_Strategy.pine');
+  const expectedStrategy=await readFile((await strategy.path())!,'utf8');
   const zip=await packageDownload(page);
+  expect(await zip.file('TradingBrain_Strategy.pine')!.async('string')).toBe(expectedStrategy);
   expect(await zip.file('TradingBrain_GOLD_M1_VLB_VHB.pine')!.async('string')).toBe(expectedPine);
   expect(await zip.file('TradingBrain.mq5')!.async('string')).toBe(await (await request.get('/ea/TradingBrain.mq5')).text());
   const json=JSON.parse(await zip.file('system.json')!.async('string'));expect(json.stats_source.status).toBe('not_uploaded');
