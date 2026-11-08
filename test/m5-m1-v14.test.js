@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const source = fs.readFileSync(path.join(__dirname, '../public/ea/TradingBrain_M5_M1_v14.pine'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../reference/legacy-ea/TradingBrain_M5_M1_v14.pine'), 'utf8');
 
 // Independent state-machine reference, not Pine execution or a backtest.
 function step(s, x) {

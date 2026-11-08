@@ -33,6 +33,13 @@ test('BT replay orders completed M5, M1 reaction, VHB and delayed engulf with fi
     assert.deepEqual(prefix.events,r.events.filter(e=>e.time<=m1[i-1].time));
   }
 });
+test('Pro V1 confirmed BT reaction can be followed by an entry away from fib',async()=>{
+  const {replayResearch}=await engine, {m1,m5}=fixture();
+  const params={useFTB:false,fibToleranceTicks:0};
+  assert.deepEqual(replayResearch(m1,m5,params).events.map(e=>e.kind),['BT','REACTION','VHB']);
+  assert.deepEqual(replayResearch(m1,m5,params,{btEntryProximity:false}).events.map(e=>e.kind),['BT','REACTION','VHB','ENTRY']);
+  assert.deepEqual(replayResearch(mirror(m1),mirror(m5),params,{btEntryProximity:false}).events.map(e=>e.kind),['BT','REACTION','VLB','ENTRY']);
+});
 test('bearish BT mirrors bullish anchors and standard M1 VLB/engulf',async()=>{
   const {replayResearch}=await engine, {m1,m5}=fixture();
   const r=replayResearch(mirror(m1),mirror(m5),{useFTB:false});

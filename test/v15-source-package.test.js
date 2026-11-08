@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const read = name => fs.readFileSync(path.join(__dirname, '../public/ea', name), 'utf8');
+const read = name => fs.readFileSync(path.join(__dirname, '../reference/legacy-ea', name), 'utf8');
 
 test('v15 indicator retains plotted setup paths without strategy orders and exposes all candidate alerts', () => {
   const pine = read('TradingBrain_Indicator_v15.pine');

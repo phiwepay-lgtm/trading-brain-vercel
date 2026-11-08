@@ -1,2 +1,2 @@
 # Preserve MetaTrader template draft bytes, including CRLF line endings.
-public/ea/*.tpl -text whitespace=cr-at-eol
+reference/legacy-ea/*.tpl -text whitespace=cr-at-eol

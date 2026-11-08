@@ -1,6 +1,6 @@
 # M5 Part 1 — user description and implementation status
 
-The user's Part 1 describes golden sessions (New York or Asian), M5 closes breaking the last swing, and waiting for 0.382 after BOS. These are user-described rules, not independently confirmed from journal screenshots, broker history or performance. The separate `public/ea/TradingBrain_M5_Part1.pine` is a disabled-by-default **indicator**, not the PR12 strategy; it places no orders, emits no alerts, and has no M1 entry or MT5 bridge. TradingView compilation and rendering have not been verified.
+The user's Part 1 describes golden sessions (New York or Asian), M5 closes breaking the last swing, and waiting for 0.382 after BOS. These are user-described rules, not independently confirmed from journal screenshots, broker history or performance. The separate `reference/legacy-ea/TradingBrain_M5_Part1.pine` is a disabled-by-default **indicator**, not the PR12 strategy; it places no orders, emits no alerts, and has no M1 entry or MT5 bridge. TradingView compilation and rendering have not been verified.
 
 ## Provisional choices requiring confirmation
 

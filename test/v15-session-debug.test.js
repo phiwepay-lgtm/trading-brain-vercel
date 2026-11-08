@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const pine = fs.readFileSync(path.join(__dirname, '../public/ea/TradingBrain_M5_M1_v15.pine'), 'utf8');
+const pine = fs.readFileSync(path.join(__dirname, '../reference/legacy-ea/TradingBrain_M5_M1_v15.pine'), 'utf8');
 
 test('v15.3 preserves completed M5 HA data and makes bypass explicit', () => {
   assert.match(pine, /Bypass_Session = input\.bool\(true, "BYPASS ALL SESSION FILTERS FOR TEST"\)/);

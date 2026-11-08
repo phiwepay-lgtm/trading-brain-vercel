@@ -5,19 +5,19 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 FILES = {
-    'Experts/TradingBrain_Tester_v153.mq5': 'public/ea/TradingBrain_Tester_v153.mq5',
-    'Presets/TradingBrain_v153_Both.set': 'public/ea/TradingBrain_v153_Both.set',
-    'Presets/TradingBrain_v153_FTB_Only.set': 'public/ea/TradingBrain_v153_FTB_Only.set',
-    'Presets/TradingBrain_v153_BT_Only.set': 'public/ea/TradingBrain_v153_BT_Only.set',
-    'Presets/TradingBrain_v153_BT_RR2.set': 'public/ea/TradingBrain_v153_BT_RR2.set',
-    'Presets/TradingBrain_v153_BT_RR5.set': 'public/ea/TradingBrain_v153_BT_RR5.set',
-    'Presets/TradingBrain_v153_BT_RR7.set': 'public/ea/TradingBrain_v153_BT_RR7.set',
+    'Experts/TradingBrain_Tester_v153.mq5': 'reference/legacy-ea/TradingBrain_Tester_v153.mq5',
+    'Presets/TradingBrain_v153_Both.set': 'reference/legacy-ea/TradingBrain_v153_Both.set',
+    'Presets/TradingBrain_v153_FTB_Only.set': 'reference/legacy-ea/TradingBrain_v153_FTB_Only.set',
+    'Presets/TradingBrain_v153_BT_Only.set': 'reference/legacy-ea/TradingBrain_v153_BT_Only.set',
+    'Presets/TradingBrain_v153_BT_RR2.set': 'reference/legacy-ea/TradingBrain_v153_BT_RR2.set',
+    'Presets/TradingBrain_v153_BT_RR5.set': 'reference/legacy-ea/TradingBrain_v153_BT_RR5.set',
+    'Presets/TradingBrain_v153_BT_RR7.set': 'reference/legacy-ea/TradingBrain_v153_BT_RR7.set',
     'Docs/MT5-Strategy-Tester-Guide.md': 'docs/mt5-v153-tester-guide.md',
 }
 
 
 def build():
-    destination = ROOT / 'public/ea/TradingBrain-MT5-v153-Tester.zip'
+    destination = ROOT / 'reference/legacy-ea/TradingBrain-MT5-v153-Tester.zip'
     with ZipFile(destination, 'w', compression=ZIP_DEFLATED, compresslevel=9) as archive:
         for name, relative in FILES.items():
             info = ZipInfo(name, date_time=(2024, 1, 1, 0, 0, 0))

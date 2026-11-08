@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const pine = fs.readFileSync(path.join(__dirname, '../public/ea/TradingBrain_M5_Part1.pine'), 'utf8');
+const pine = fs.readFileSync(path.join(__dirname, '../reference/legacy-ea/TradingBrain_M5_Part1.pine'), 'utf8');
 
 // Independent reference for state/anchor arithmetic only; this does not execute Pine.
 function evaluate(state, x) {

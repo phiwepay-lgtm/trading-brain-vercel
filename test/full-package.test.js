@@ -15,7 +15,7 @@ test('full package system uses only local uploaded journal aggregates and preser
   assert.throws(()=>journalSystem({}),TypeError);
 });
 test('Pine source has non-repainting HTF data, explicit opt-in and visual-only output',()=>{
-  const pine=fs.readFileSync('public/ea/TradingBrain_GOLD_M1_VLB_VHB.pine','utf8');
+  const pine=fs.readFileSync('reference/legacy-ea/TradingBrain_GOLD_M1_VLB_VHB.pine','utf8');
   assert.match(pine,/^\/\/@version=5/);assert.match(pine,/input\.bool\(false, "Enable visual scanner/);assert.match(pine,/input\.bool\(true, "Use M5 HTF Filter/);
   assert.match(pine,/ta\.highest\(high, M5_Len\)\[1\].*lookahead=barmerge\.lookahead_on/);
   assert.match(pine,/ta\.lowest\(low, M5_Len\)\[1\].*lookahead=barmerge\.lookahead_on/);
@@ -27,7 +27,7 @@ test('Pine source has non-repainting HTF data, explicit opt-in and visual-only o
   assert.doesNotMatch(executable,/strategy\s*\(|strategy\.entry|strategy\.order|alertcondition\s*\(/);
 });
 test('MT5 source stays opt-in and contains no execution or network APIs',()=>{
-  const mq=fs.readFileSync('public/ea/TradingBrain.mq5','utf8');
+  const mq=fs.readFileSync('reference/legacy-ea/TradingBrain.mq5','utf8');
   assert.match(mq,/Enable_Visual_Scanner = false/);assert.match(mq,/Use_M5_Filter = true/);
   assert.match(mq,/iHigh\(_Symbol,PERIOD_M5/);assert.match(mq,/iLow\(_Symbol,PERIOD_M5/);
   assert.match(mq,/m5shift\+1/);assert.match(mq,/OBJ_RECTANGLE/);assert.match(mq,/OBJ_ARROW/);
