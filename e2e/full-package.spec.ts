@@ -5,12 +5,19 @@ import JSZip from 'jszip';
 test('download center presents current research drafts and working source downloads',async({page,request})=>{
   await page.goto('/ea');
   await expect(page.getByText('v15.3 DRAFTS')).toBeVisible();
+  await expect(page.getByText('TESTED · AUTOMATED RESEARCH CHECKS')).toBeVisible();
+  await expect(page.getByText(/Pine and MQL platform compilation, broker execution and strategy performance are not verified/)).toBeVisible();
   for (const name of ['TradingBrain.mq5','TradingBrain_GOLD_M1_VLB_VHB.pine','TradingBrain_Strategy.pine','TradingBrain_M5_M1_v14.pine','TradingBrain-v15-BT-FTB-Full.zip']) await expect(page.getByText(name,{exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Download Full Package (ZIP)'})).toHaveCount(0);
   await expect(page.getByText(/not equivalent to the MT5 draft/)).toBeVisible();
   const eaPending=page.waitForEvent('download');await page.getByRole('link',{name:'Download Tester EA (.mq5)'}).click();const ea=await eaPending;
   expect(ea.suggestedFilename()).toBe('TradingBrain_Tester_v153.mq5');
   const eaSource=await readFile((await ea.path())!,'utf8');expect(eaSource).toContain('Strategy Tester only; no live or demo operation');
+  const mirroredPending=page.waitForEvent('download');await page.getByRole('link',{name:'Download Mirrored Pine (.pine)'}).click();const mirrored=await mirroredPending;
+  expect(mirrored.suggestedFilename()).toBe('TradingBrain_M5_M1_v153_Mirrored.pine');expect(await readFile((await mirrored.path())!,'utf8')).toContain('bosLegLow + legRange * 0.382');
+  const indicatorPending=page.waitForEvent('download');await page.getByRole('link',{name:'Download Mirrored Indicator (.pine)'}).click();const indicator=await indicatorPending;
+  expect(indicator.suggestedFilename()).toBe('TradingBrain_Indicator_v153_Mirrored.pine');const indicatorSource=await readFile((await indicator.path())!,'utf8');expect(indicatorSource).toContain('indicator(\"TradingBrain v15.3 Mirrored');expect(indicatorSource).not.toContain('strategy.entry(');
+  const templatePending=page.waitForEvent('download');await page.getByRole('link',{name:'Download Visual Template Draft (.tpl)'}).click();const template=await templatePending;expect(template.suggestedFilename()).toBe('TradingBrain_Visual_Draft.tpl');const templateText=await readFile((await template.path())!,'utf8');expect(templateText).toContain('<chart>');expect(templateText).not.toContain('<expert>');
   const pinePending=page.waitForEvent('download');await page.getByRole('link',{name:'Download Pine Draft (.pine)'}).click();const pine=await pinePending;
   expect(pine.suggestedFilename()).toBe('TradingBrain_M5_M1_v15.pine');expect(await readFile((await pine.path())!,'utf8')).toContain('TradingBrain v15.3');
   const pending=page.waitForEvent('download');await page.getByRole('link',{name:'Download MT5 Tester Kit (.zip)'}).click();const download=await pending;
@@ -21,6 +28,7 @@ test('download center presents current research drafts and working source downlo
   const instructions=await (await request.get('/ea/README.txt')).text();expect(instructions).toContain('TRADING BRAIN - v15.3 RESEARCH TOOLKIT');expect(instructions).toContain('bearish BT structure and fib anchor differ');
   // Old direct links remain accessible; they are not offered as current downloads.
   expect((await request.get('/ea/TradingBrain_M5_M1_v14.pine')).status()).toBe(200);
+  await expect(page.locator('.ea-current-chart').getByRole('link',{name:'Open tester'})).toHaveAttribute('href','/tester');
   await page.locator('.ea-current-chart').getByRole('link',{name:'Open chart'}).click();await expect(page).toHaveURL(/\/chart$/);
 });
 
