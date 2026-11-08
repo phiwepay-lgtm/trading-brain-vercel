@@ -1,10 +1,13 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import ChartPane, { type Bar, type Marker, type PaneHandle } from './pane';
 import JournalTable from '../components/journal-table';
 import { useJournal } from '../components/journal-store';
+import { useJournalFilters } from '../components/journal-filters';
+import { filterTrades } from '../../lib/journal-filter.mjs';
+import { mapJournalMarkers } from '../../lib/journal-markers';
 import { tradeFocus, tradeSymbol, tradeTimestamp } from '../../lib/journal';
 import { aggregateMinute, applyTick, mergeBars } from '../../lib/chart-math.mjs';
 import { demoPrice } from '../../lib/demo-feed.mjs';
@@ -21,10 +24,12 @@ export default function ChartWorkspace() {
   const [symbol,setSymbol] = useState<SymbolCode>('XAUUSD'), [token,setToken] = useState(''), [tokenInput,setTokenInput] = useState('');
   const [forceDemo,setForceDemo] = useState(false), [source,setSource] = useState<Source>('demo'), [instrument,setInstrument] = useState('SIMULATED');
   const [m1,setM1] = useState<Bar[]>([]), [m5,setM5] = useState<Bar[]>([]), [dataState,setDataState] = useState('Loading chart data…'), [streamState,setStreamState] = useState('loading');
-  const [tick,setTick] = useState<Tick | null>(null), [sync,setSync] = useState(true), [settings,setSettings] = useState(false), [focus,setFocus] = useState<Focus | null>(null);
+  const [tick,setTick] = useState<Tick | null>(null), [sync,setSync] = useState(true), [showTrades,setShowTrades] = useState(true), [settings,setSettings] = useState(false), [focus,setFocus] = useState<Focus | null>(null);
   const [hasMore,setHasMore] = useState({M1:true,M5:true}), [loadingMore,setLoadingMore] = useState({M1:false,M5:false});
-  const {journal} = useJournal(); const searchParams = useSearchParams(); const selectedId = searchParams.get('trade');
-  const pane1 = useRef<PaneHandle>(null), pane5 = useRef<PaneHandle>(null), m1Ref = useRef<Bar[]>([]), m5Ref = useRef<Bar[]>([]), generation = useRef(0), fetching = useRef({M1:false,M5:false}), lastTick = useRef(0);
+  const {journal} = useJournal(); const {filters} = useJournalFilters();
+  const filtered = useMemo(() => filterTrades(journal?.trades ?? [], filters), [journal, filters]);
+  const journalMarkers = useMemo(() => showTrades ? mapJournalMarkers(filtered, symbol) : [], [filtered, symbol, showTrades]); const searchParams = useSearchParams(); const selectedId = searchParams.get('trade');
+  const pane1 = useRef<PaneHandle>(null), pane5 = useRef<PaneHandle>(null), m1Ref = useRef<Bar[]>([]), m5Ref = useRef<Bar[]>([]), generation = useRef(0), fetching = useRef({M1:false,M5:false}), lastTick = useRef(0), initializedRange = useRef(0);
   const writeBars = (tf: 'M1'|'M5', bars: Bar[]) => { if (tf === 'M1') {m1Ref.current=bars;setM1(bars);} else {m5Ref.current=bars;setM5(bars);} };
   useEffect(() => {try {setToken(sessionStorage.getItem('chart-access-token') || '');} catch {}},[]);
   useEffect(() => {
@@ -97,6 +102,14 @@ export default function ChartWorkspace() {
     }
     void start(); return () => controller.abort();
   },[symbol,token,forceDemo,focus]);
+  useEffect(() => {
+    if (!m1.length || !m5.length || initializedRange.current === generation.current || !sync) return;
+    initializedRange.current = generation.current;
+    const from = focus ? Math.floor((focus.time - 3600)/300)*300 : Math.floor(m1[Math.max(0,m1.length-120)].time/300)*300;
+    const to = focus ? Math.floor((focus.time + 3600)/300)*300 : Math.floor(m1[m1.length-1].time/300)*300 + 300;
+    const frame=requestAnimationFrame(() => {pane1.current?.range({from:from as any,to:to as any});pane5.current?.range({from:from as any,to:to as any});});
+    return () => cancelAnimationFrame(frame);
+  }, [m1,m5,focus,sync]);
   const history = useCallback(async (tf: 'M1'|'M5') => {
     const bars=tf==='M1'?m1Ref.current:m5Ref.current; if(!bars.length||fetching.current[tf]||!hasMore[tf])return;
     const current=generation.current;fetching.current[tf]=true;setLoadingMore(v=>({...v,[tf]:true}));
@@ -107,22 +120,21 @@ export default function ChartWorkspace() {
   const crosshair=useCallback((from:string,time:number|null,price:number)=>{if(sync)(from==='M1'?pane5:pane1).current?.crosshair(time,price);},[sync]);
   const range=useCallback((from:string,value:any)=>{if(sync)(from==='M1'?pane5:pane1).current?.range(value);},[sync]);
   const markers: Marker[]=[];
-  if (journal && source === 'twelvedata') for (const trade of journal.trades) {
+  if (showTrades && source === 'twelvedata') for (const {trade} of filtered) {
     if (tradeSymbol(trade.symbol ?? trade.pair)!==symbol) continue;
-    const side=String(trade.side ?? trade.direction ?? trade.type ?? trade.dir ?? '').toUpperCase(), time=tradeTimestamp(trade.entry_time ?? trade.entryTime ?? trade.open_time ?? trade.openTime ?? trade.openedAt), price=Number(trade.entry_price ?? trade.entryPrice ?? trade.entry);
-    if (['BUY','SELL'].includes(side) && time && Number.isFinite(price) && price>0) markers.push({time,price,label:`${side==='BUY'?'▲':'▼'} ${side} entry`,color:side==='BUY'?'#35ddb1':'#ff8591'});
     const exitTime=tradeTimestamp(trade.exit_time ?? trade.exitTime ?? trade.close_time ?? trade.closeTime ?? trade.closedAt), exitPrice=Number(trade.exit_price ?? trade.exitPrice ?? trade.exit); const pnl=trade.pnl ?? trade.profit;
     if (exitTime && Number.isFinite(exitPrice) && exitPrice>0) markers.push({time:exitTime,price:exitPrice,label:`● Exit${pnl!==undefined&&pnl!==null&&pnl!==''&&Number.isFinite(Number(pnl))?` · P/L ${Number(pnl).toFixed(2)}`:''}`,color:'#efc75c'});
   }
   const leaveFocus=()=>{setFocus(null);window.history.replaceState(null,'','/chart');};
   const connect=(e:React.FormEvent)=>{e.preventDefault();try{sessionStorage.setItem('chart-access-token',tokenInput);}catch{}setToken(tokenInput);setTokenInput('');setForceDemo(false);};
   return <main className="chart-workspace"><header className="chart-topbar"><Link className="chart-brand" href="/chart"><span className="brand-mark">◈</span><span>TRADING<span className="brand-muted">BRAIN</span><small>WORKSPACE</small></span></Link><nav aria-label="Main navigation"><Link href="/chart" className="active">Charts</Link><Link href="/dashboard">Monitor</Link><Link href="/brain">Assessment</Link><Link href="/ea">EA</Link></nav><div className="top-meta"><span className="status-dot"/> MT5 OFFLINE <span className="top-divider"/> SCANNING OFF</div></header>
-    <div className="workspace-content"><div className="workspace-heading"><div><div className="eyebrow">MARKET WORKSPACE <span>/</span> DUAL TIMEFRAME</div><h1>Chart workspace<span>.</span></h1><p>One market. Two perspectives. Your setup, in focus.</p></div><div className="heading-actions"><button onClick={()=>setSync(!sync)} className={sync?'active-control':''} aria-pressed={sync}>⛓ &nbsp;Sync {sync?'on':'off'}</button><button onClick={()=>setSettings(v=>!v)} aria-expanded={settings}>⚙ &nbsp;Settings</button></div></div>
+    <div className="workspace-content"><div className="workspace-heading"><div><div className="eyebrow">MARKET WORKSPACE <span>/</span> DUAL TIMEFRAME</div><h1>Chart workspace<span>.</span></h1><p>One market. Two perspectives. Your setup, in focus.</p></div><div className="heading-actions"><button onClick={()=>setSync(!sync)} className={sync?'active-control':''} aria-pressed={sync}>⛓ &nbsp;Sync {sync?'on':'off'}</button><button onClick={()=>setShowTrades(v=>!v)} className={showTrades?'active-control':''} aria-pressed={showTrades}>Show My Trades {showTrades?'on':'off'}</button><button onClick={()=>setSettings(v=>!v)} aria-expanded={settings}>⚙ &nbsp;Settings</button></div></div>
     {settings && <div className="settings-note"><strong>Chart settings</strong><span>Times are UTC. EMA uses the displayed feed's non-Heiken Ashi closes. Provider data, proxy data and demo data are distinct.</span><button onClick={()=>{try{sessionStorage.removeItem('chart-access-token');}catch{}setToken('');setForceDemo(false);}}>Forget access token</button><button onClick={()=>setForceDemo(false)}>Retry automatic feed</button></div>}
     <div className="market-bar"><div className="market-select"><span className="market-icon">◇</span><div><label htmlFor="symbol-select">SYMBOL</label><select id="symbol-select" value={symbol} onChange={e=>{leaveFocus();setSymbol(e.target.value as SymbolCode);}}><option value="XAUUSD">XAUUSD</option><option value="EURUSD">EURUSD</option><option value="BTCUSD">BTCUSD</option></select></div><span className="market-name">{names[symbol]}</span></div><div className="quote-strip"><div><small>BID</small><strong>{format(tick?.bid,symbol)}</strong></div><div><small>ASK</small><strong>{format(tick?.ask,symbol)}</strong></div><div><small>LAST {source==='demo'?'· DEMO':source==='binance'?'· PROXY':''}</small><strong>{format(tick?.last,symbol)}</strong></div><div className="feed-status"><i/>{source==='demo'?'DEMO':source==='binance'?'PROXY · POLLING':streamState.toUpperCase()}<small>{tick?`Observed ${new Date(tick.time*1000).toISOString().replace('T',' ').slice(0,19)} UTC`:'Awaiting quote'}</small></div></div></div>
     <div className={`feed-notice ${source==='demo'?'demo':source==='binance'?'proxy':''}`} role="status"><span>{dataState} {source==='demo'&&'Not for trading.'}</span><span>{source==='demo'?'Simulated data is not a real market quote.':source==='binance'?`${instrument}: proxy market, not spot ${symbol}.`:'HA close is synthetic and may differ from last.'}</span><button className="demo-button" onClick={()=>setForceDemo(true)}>Skip - Use Demo</button></div>
     {!token && <form className="chart-access" onSubmit={connect}><label htmlFor="chart-token">Optional chart access token</label><input id="chart-token" type="password" value={tokenInput} onChange={e=>setTokenInput(e.target.value)} placeholder="If configured on server" minLength={24} required autoComplete="off"/><button type="submit">Connect data</button><span>Optional for demo. Never enter a provider API key here.</span></form>}
     {focus && <div className="focus-note"><span>Selected journal trade {focus.index+1} · {focus.approximate?'Date only — exact time unknown; showing UTC day start.':`Entry time ${new Date(focus.time*1000).toISOString()}`} {source==='demo'?'Vertical highlight only: recorded prices do not match simulated candles.':source==='binance'?'Vertical highlight only: recorded prices are not proxy prices.':''} {m1.length && !m1.some(b=>b.time===Math.floor(focus.time/60)*60) ? 'Selected time is outside available candles.' : ''}</span><button onClick={leaveFocus}>Return to current chart</button></div>}
-    <div className="chart-grid"><ChartPane key={`${symbol}-M5-${focus?.index ?? 'now'}`} ref={pane5} source={source} focus={focus} symbol={symbol} timeframe="M5" bars={m5} markers={markers} onCrosshair={crosshair} onRange={range} onHistory={()=>history('M5')} hasMore={hasMore.M5} loadingMore={loadingMore.M5}/><ChartPane key={`${symbol}-M1-${focus?.index ?? 'now'}`} ref={pane1} source={source} focus={focus} symbol={symbol} timeframe="M1" bars={m1} markers={markers} onCrosshair={crosshair} onRange={range} onHistory={()=>history('M1')} hasMore={hasMore.M1} loadingMore={loadingMore.M1} onCopy={()=>pane5.current?.addDrawings(pane1.current?.copyDrawings()||[])}/></div>
+    <div className="chart-grid"><ChartPane key={`${symbol}-M5-${focus?.index ?? 'now'}`} ref={pane5} source={source} focus={focus} symbol={symbol} timeframe="M5" bars={m5} markers={markers} journalMarkers={journalMarkers} onCrosshair={crosshair} onRange={range} onHistory={()=>history('M5')} hasMore={hasMore.M5} loadingMore={loadingMore.M5}/><ChartPane key={`${symbol}-M1-${focus?.index ?? 'now'}`} ref={pane1} source={source} focus={focus} symbol={symbol} timeframe="M1" bars={m1} markers={markers} journalMarkers={journalMarkers} onCrosshair={crosshair} onRange={range} onHistory={()=>history('M1')} hasMore={hasMore.M1} loadingMore={loadingMore.M1} onCopy={()=>pane5.current?.addDrawings(pane1.current?.copyDrawings()||[])}/></div>
+    {journal && <p className="trade-marker-note">{filtered.length} filtered journal records · {journalMarkers.length} have a supported symbol, side and exact openedAt for {symbol}. Arrows mark candle time, not execution price. Hover the matching candle for details; click a journal row to jump to older trades. Demo/proxy candles do not represent your trade prices.</p>}
     <JournalTable/><footer className="chart-footer"><span>Simulated and proxy feeds are not suitable for trading decisions. Not financial advice.</span><span>NO MT5 CONNECTION &nbsp;·&nbsp; NO AUTOMATED SCANNING</span></footer></div></main>;
 }

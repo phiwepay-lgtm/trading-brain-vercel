@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import JournalTable, { LearningStatus } from '../components/journal-table';
+import JournalTable from '../components/journal-table';
+import LearningStatus from '../components/learning-status';
 import { Activity, ArrowDownRight, ArrowRight, BarChart3, BookOpen, Braces, Upload, Download, CheckCircle2, ChevronRight, CircleHelp, Clock3, Database, ExternalLink, FileTerminal, Gauge, LayoutDashboard, LoaderCircle, Pause, Play, Radio, RefreshCw, ShieldCheck, TerminalSquare, Trash2, Wallet, WifiOff } from 'lucide-react';
 
 type Status = { mt5_connected: boolean; scanning: boolean; bot_status: string; last_trade_time: string | null; pnl_today: number | null; source: string; checked_at: string };
@@ -141,6 +142,7 @@ export default function Monitor() {
         <section className="connection-notice" aria-label="Connection notice"><div className="connection-notice-icon"><WifiOff size={18} /></div><div><strong>Observation mode</strong><p>{statusNote} Live trading data will appear when a real integration is configured.</p></div><span className="connection-pill"><span /> MT5 {status?.mt5_connected ? 'CONNECTED' : status ? 'DISCONNECTED' : 'UNKNOWN'}</span></section>
         <div className="feedback-line" role="status" aria-live="polite"><CheckCircle2 size={13} /> <span>{feedback}</span></div>
         {pollError && <div className="poll-error" role="alert">{pollError}</div>}
+        <LearningStatus />
         <section className="metrics-section" aria-labelledby="status-title"><div className="monitor-section-head"><div><div className="section-eyebrow">YOUR SYSTEM <span>01</span></div><h2 id="status-title">Live status<span>.</span></h2><p>Your system at a glance. Click a card for details.</p></div><div className="section-micro"><span className={paused ? 'quiet-dot' : 'green-dot'} /> {paused ? 'POLLING PAUSED' : 'POLLING EVERY 3S'}</div></div>
           <div className="monitor-metrics">
             <button type="button" className="monitor-metric metric-bot" onClick={() => inform(statusNote + ' Bot on/off state is unknown until connected.')}><span className="metric-label">BOT STATUS <Gauge size={16} /></span><span className="metric-main">{status?.bot_status === 'on' ? 'ON' : status?.bot_status === 'off' ? 'OFF' : 'UNKNOWN'}</span><span className="metric-sub"><span className="metric-status-dot" /> {status?.mt5_connected ? 'CONNECTED' : 'NO BOT CONNECTION'}</span><ChevronRight size={14} className="metric-chevron" /></button>
@@ -148,7 +150,6 @@ export default function Monitor() {
             <button type="button" className="monitor-metric" onClick={() => inform(typeof pnl === 'number' ? `P/L today: ${pnl}. Currency not specified by source.` : 'Today’s P/L is unavailable until a trade feed is connected.')}><span className="metric-label">P/L TODAY <Wallet size={16} /></span><span className="metric-main">{typeof pnl === 'number' ? pnl.toFixed(2) : '—'}</span><span className="metric-sub">{typeof pnl === 'number' ? 'CURRENCY NOT SPECIFIED' : 'AWAITING TRADE FEED'}</span><ChevronRight size={14} className="metric-chevron" /></button>
           </div>
         </section>
-        <LearningStatus />
         <JournalTable />
         <div className="monitor-grid">
           <section className="feed-panel panel" id="live-trades"><div className="panel-heading"><div><div className="section-eyebrow">YOUR ACTIVITY <span>02</span></div><h2>Recent trades<span>.</span></h2><p>Trade activity from your connected account.</p></div><button type="button" className="icon-action" onClick={() => void poll(true)} disabled={refreshing} aria-label="Refresh recent trades" title="Refresh recent trades" aria-busy={refreshing}><RefreshCw size={15} className={refreshing ? 'spin' : ''} /></button></div><div className="table-scroll"><table><thead><tr><th>TIME</th><th>PAIR</th><th>ACTION</th><th>PRICE</th><th>PROFIT</th></tr></thead><tbody>{trades?.available && trades.trades.length > 0 ? trades.trades.map((trade, index) => <tr key={`${trade.time}-${index}`}><td>{time(trade.time)}</td><td>{trade.pair}</td><td>{trade.action}</td><td>{trade.price}</td><td>{trade.profit}</td></tr>) : <tr><td colSpan={5}><div className="table-empty"><span className="empty-icon"><BarChart3 size={20} /></span><strong>{trades?.available ? 'No recent trades' : 'No trade feed connected'}</strong><p>{trades?.message || 'Checking the trade feed…'}</p></div></td></tr>}</tbody></table></div><div className="panel-bottom"><span><Database size={13} /> {trades?.available ? 'TRADE FEED CONNECTED' : 'AWAITING CONNECTION'}</span><span>LAST CHECK {time(trades?.checked_at)}</span></div></section>
