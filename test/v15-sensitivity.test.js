@@ -16,7 +16,7 @@ test('v15 debug defaults and pivot-age thresholds are explicit', () => {
   assert.match(pine, /plot\(Debug_M5 and isM1 and isStandard \? expectedLow : na/);
   assert.match(pine, /plot\(Debug_M5 and expectingBullBOS \? 1 : na, title="Expecting Bull BOS count", display=display\.data_window\)/);
   assert.match(pine, /plot\(Debug_M5 and expectingBearBOS \? 1 : na, title="Expecting Bear BOS count", display=display\.data_window\)/);
-  assert.match(pine, /table\.new\(position\.top_right, 2, 5,/);
+  assert.match(pine, /table\.new\(position\.top_right, 2, 6,/);
   assert.match(pine, /Debug_M5 \? "M5 Pivots Today"/);
   assert.match(pine, /Debug_M5 \? str\.tostring\(isNewHighPivot or isNewLowPivot\)/);
 });

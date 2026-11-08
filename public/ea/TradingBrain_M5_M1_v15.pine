@@ -25,6 +25,7 @@ Order_Quantity = input.float(1.0, "Simulated quantity", minval=0.000001)
 Engulf_Multiplier = input.float(1.2, "Engulf body size multiplier", minval=1.0, maxval=10.0, step=0.1)
 Fib_Tolerance_Ticks = input.int(30, "0.382 entry proximity (ticks)", minval=0, maxval=1000)
 Use_FTB = input.bool(true, "Use experimental FTB path")
+Test_Mode = input.string("Both", "Test Edge Mode", options=["Both", "FTB Only (my edge)", "BT Only (common)"])
 Require_HA_Color_Shift = input.bool(true, "Require preceding opposite HA colour for FTB")
 Debug_M5 = input.bool(true, "Show M5 HA debug")
 
@@ -94,6 +95,8 @@ var int usedLowPivot = na
 var int usedFtbHighPivot = na
 var int usedFtbLowPivot = na
 var string setupType = "NONE"
+allowBT = Test_Mode == "Both" or Test_Mode == "BT Only (common)"
+allowFTB = Test_Mode == "Both" or Test_Mode == "FTB Only (my edge)"
 var float ftbLevel = na
 var float bosLegLow = na
 var float bosLegHigh = na
@@ -215,7 +218,9 @@ if barstate.isconfirmed
             bearEngulf = contiguous and close[1] > open[1] and close < open and open >= close[1] and close < open[1] and (open - close) > (close[1] - open[1]) * Engulf_Multiplier
             nearFib = not na(fib0382) and math.abs(close - fib0382) <= Fib_Tolerance_Ticks * syminfo.mintick
             pathReady = setupType == "FTB" or (setupType == "BT" and nearFib)
-            canConfirm = state == "CHOCH_FOUND" and bar_index > chochBar + 1 and pathReady and (na(entryBar) or entryBar != bar_index)
+            // Gate before marking or submitting either entry; detection still runs for both paths.
+            edgeAllowed = (setupType == "BT" and allowBT) or (setupType == "FTB" and allowFTB)
+            canConfirm = state == "CHOCH_FOUND" and bar_index > chochBar + 1 and pathReady and edgeAllowed and (na(entryBar) or entryBar != bar_index)
             if canConfirm and direction == 1 and bullEngulf
                 stop = math.round_to_mintick(low - Stop_Buffer_Ticks * syminfo.mintick)
                 risk = close - stop
@@ -255,7 +260,7 @@ plotshape(bullChoch, title="Bullish CHoCH VHB candidate", text="VHB?", style=sha
 plotshape(bearChoch, title="Bearish CHoCH VLB candidate", text="VLB?", style=shape.labeldown, location=location.abovebar, color=color.maroon, textcolor=color.white, size=size.tiny)
 plotshape(buyEntry, title="Simulated buy confirmation", text="BUY?", style=shape.triangleup, location=location.belowbar, color=color.lime, textcolor=color.white, size=size.small)
 plotshape(sellEntry, title="Simulated sell confirmation", text="SELL?", style=shape.triangledown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
-var table panel = table.new(position.top_right, 2, 5, border_width=1)
+var table panel = table.new(position.top_right, 2, 6, border_width=1)
 if barstate.islast
     table.cell(panel, 0, 0, "STRUCTURE DRAFT", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 1, 0, not Enable_Simulation ? "OFF" : not isM1 or not isStandard ? "USE STANDARD M1" : not Sessions_Confirmed ? "CONFIRM SESSIONS" : "SIMULATION ONLY", text_color=color.white, bgcolor=color.black)
@@ -268,3 +273,5 @@ if barstate.islast
     // This requested display is a current-bar boolean, not a daily count.
     table.cell(panel, 0, 4, Debug_M5 ? "M5 Pivots Today" : "", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 1, 4, Debug_M5 ? str.tostring(isNewHighPivot or isNewLowPivot) : "", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 0, 5, "Testing Edge", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 5, Test_Mode, text_color=color.yellow, bgcolor=color.black)
