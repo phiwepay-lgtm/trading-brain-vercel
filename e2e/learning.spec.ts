@@ -21,10 +21,12 @@ test('client-only unverified statistics, breakdown filters and synchronized trad
   await brain.getByRole('button',{name:'Filter By session / hour new-york · 14:00'}).click();await expect(page.getByText('30 matching')).toBeVisible();
   await brain.getByRole('button',{name:'Filter By setup BT 0.382'}).click();await expect(page.getByText('30 matching')).toBeVisible();
   await page.getByRole('link',{name:'Chart workspace'}).click();await expect(page).toHaveURL(/\/chart$/);
-  await page.getByRole('button',{name:'Skip - Use Demo'}).click();await expect(page.getByRole('status')).toContainText('Using demo feed');
+  await page.getByLabel('SYMBOL').selectOption('XAUUSD');await page.getByRole('button',{name:'Skip - Use Demo'}).click();await expect(page.getByRole('status')).toContainText('Using demo feed');
   await expect(page.getByText(/30 filtered journal records/)).toBeVisible();
+  await expect(page.getByText(/Research history loaded|Provider returned less than|Some research history could not be loaded/)).toBeVisible();
   await expect(page.getByLabel('M1 trade markers')).toContainText('30 trade markers');await expect(page.getByLabel('M5 trade markers')).toContainText('30 trade markers');
   // Locate an actual rendered buy triangle by its marker color, then exercise its hover tooltip.
+  await page.getByLabel('M1 chart').locator('.chart-host').scrollIntoViewIfNeeded();
   const box = await page.getByLabel('M1 chart').locator('.chart-host').boundingBox();
   expect(box).not.toBeNull();
   const image = (await page.screenshot()).toString('base64');

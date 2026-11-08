@@ -1,5 +1,7 @@
 # Trading Brain
 
+![CI](https://github.com/phiwepay-lgtm/trading-brain-vercel/actions/workflows/ci.yml/badge.svg)
+
 A standalone Next.js dashboard for the M5 structure → 0.382 → M1 VLB sell / VHB buy + engulf system. It is Vercel-ready and does not connect to MT5, scan markets or place trades. An optional journal can be uploaded for a browser-local table and chart navigation.
 
 ## Current data and privacy
@@ -19,9 +21,13 @@ Requires Node.js 20.9 or newer.
 npm ci
 npm run dev
 # http://localhost:3000
+npm run lint # research strategy JS scope
+npm run typecheck
 npm test
 npm run build
 ```
+
+For `/chart` research assumptions, simulated fills and limitations, see [Chart research workspace](docs/chart-research-foundation.md).
 
 ## API
 
