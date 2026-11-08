@@ -1,3 +1,4 @@
+// TODO PR13: WebRequest bridge - Read JSON from TV webhook (not implemented).
 // Trading Brain M5/M1 visual scanner. NO order submission or network requests.
 // The VLB/VHB markers are engulfing-at-extreme candidates, NOT confirmed BOS,
 // CHoCH, pullback, continuation or verified BT/FTB patterns. Manual review only.

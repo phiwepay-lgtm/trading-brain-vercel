@@ -60,3 +60,53 @@ unverified journal data, not brokerage performance or a tested strategy. The
 17:00 NY best-hour claim conflicts with the earlier proposed 14:00-16:00 NY
 filter; neither is verified. The R:R slider is hypothetical, not a backtest.
 Demo and Binance proxy prices are not live market execution.
+
+PR12 SEPARATE TRADINGVIEW STRATEGY (SIMULATED ONLY)
+1. Paste TradingBrain_Strategy.pine into Pine Editor, save and add to an M1
+   GOLD chart. The PR11 indicator is unchanged. Enable_Backtest is false by
+   default. Turn it on only for research after reviewing the code. Set UTC
+   Start/End dates and signal-bar quarter; the defaults cover 2024 and 2025 only.
+2. TradingView's Strategy Tester reports simulated trades for the selected
+   date/signal-quarter range. The bottom-left custom table shows closed-trade
+   totals, win rate, PF, closed-equity DD, gross price R, and Q1-Q4 PF grouped
+   by EXIT quarter in UTC across years. The quarter input filters SIGNAL bars;
+   existing trades can close outside the selected dates or signal quarter.
+   Quarterly breakdown is in the script's table, NOT the native Performance
+   Summary. Show Last 500 affects ONLY the custom table, not native Strategy
+   Tester metrics or simulated orders. If fewer than 500 closed trades exist,
+   it displays all available. The script does not guarantee 500 trades.
+3. Custom PF/wins/DD use TradingView's strategy.closedtrades.profit values;
+   check its cost semantics against the Strategy Tester. The closed-only DD
+   ignores open/intrabar equity drawdown and may differ from native max DD.
+   Avg R uses price movement from the actual fill divided by distance to the
+   stop set at signal time, before commission; cases where a gap places the
+   fill through the stop are excluded, and the valid denominator is shown.
+   There is no profit factor when no losses exist. Backtest results are not
+   verified journal statistics and do not prove real-world performance.
+4. The stop is the signal bar's extreme plus/minus a configurable tick buffer;
+   the target is RR times the signal close-to-stop distance, with simulated
+   quantity configurable. Market orders normally fill on the next available
+   tick. Gaps, slippage, 0.02% commission per order, data quality, position
+   sizing, exchange rules and historical fill assumptions affect results.
+   The actual fill can differ from signal close or cross the bracket. Exit
+   orders remain active after the date/quarter window. TradingView may limit
+   accessible history and number of strategy orders.
+
+TRADINGVIEW ALERTS / FUTURE BRIDGE GUIDE
+NO BRIDGE OR LIVE AUTOMATION IS PROVIDED. PR11 TradingBrain.mq5 has no
+WebRequest, file receiver or order code. A separate authenticated, replay-safe
+relay and independently reviewed MT5 receiver are required for any future
+integration. The JSON alerts are untrusted simulated candidate notifications,
+not broker fills or trade instructions; do not forward them to a live account.
+
+To inspect messages only: enable Enable_Backtest and Enable_Alerts on an M1
+chart, then create a TradingView strategy alert for "alert() function calls
+only". The strategy's alertcondition() declarations do NOT fire in strategy
+scripts. alert() emits the dynamic bias/symbol/price JSON at signal close on
+realtime bars, before any simulated fill; it does not issue historical alerts.
+If your TradingView plan supports webhooks, an HTTPS request inspection service
+such as webhook.site can receive TEST payloads, but third parties may store
+the message. Do not send private data or credentials. A capture URL is not an
+MT5 bridge, and webhook.site is not a secure trade relay. A file-based bridge
+would likewise need a separate service to authenticate, validate, deduplicate
+and write messages and a separate MT5 reader; neither component exists here.
