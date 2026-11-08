@@ -2,14 +2,14 @@
 
 ## Status and safety
 
-This is an **experimental source package**, not a verified or profitable trading system. The supplied v15 Pine strategy is unchanged. Its chart structure, pivot selection, session settings and anchors are user-described approximations, not fitted to the 40-record journal. Neither the Pine scripts nor the MQL sources were compiled or tested in TradingView or MetaEditor here. The MQL ports are unverified drafts and **must not be considered equivalent to the Pine strategy** until compiled and compared bar by bar. No EX5 or MT5/website bridge is supplied.
+This is an **experimental source package**, not a verified or profitable trading system. The v15 Pine strategy has experimental sensitivity and pivot-expectation changes described below. Its chart structure, pivot selection, session settings and anchors are user-described approximations, not fitted to the 40-record journal. Neither the Pine scripts nor the MQL sources were compiled or tested in TradingView or MetaEditor here. The MQL ports are unverified drafts and **must not be considered equivalent to the Pine strategy** until compiled and compared bar by bar. No EX5 or MT5/website bridge is supplied.
 
 The new EAs are off by default. They use `CTrade` only inside the MT5 Strategy Tester and only when `Enable_Simulation`, session/clock confirmations and `Enable_StrategyTester_Orders` are explicitly enabled. They cannot place live or demo account orders; the existing MT5 visual scanner is unchanged. MT5 Strategy Tester market orders are submitted on the first tick after the signal M1 bar closes, not guaranteed at signal close. Check broker volume, stop rules, spreads, gaps and fills. Tick size and contract/lot units may differ from TradingView.
 
 ## BT versus FTB
 
 - **BT / Break Theory:** a completed M5 Heikin Ashi close breaks a confirmed swing. With valid leg anchors the draft waits for a 0.382 touch, M1 CHoCH and confirmation; its entry close must be within the configured 0.382 tolerance.
-- **FTB / Failure to Break:** a completed M5 Heikin Ashi candle approaches a previously confirmed HH/LL, closes back on the failure side and shifts colour. The prior opposite colour is required by default. Failed high routes to bearish M1 CHoCH; failed low routes to bullish M1 CHoCH. FTB does **not** require the BT fib touch or entry-proximity filter.
+- **FTB / Failure to Break:** a completed M5 Heikin Ashi candle touches or crosses a previously confirmed pivot high/low, closes back on the failure side and shifts colour. The prior opposite colour is required by default. Failed high routes to bearish M1 CHoCH; failed low routes to bullish M1 CHoCH. FTB does **not** require the BT fib touch or entry-proximity filter.
 - The v15 strategy's completed M5 HA data is synthetic. Its M1 chart must use standard candles. Signals are only candidates; exact visual pivots, fib anchor identification, failure and session criteria require manual validation.
 
 ## State machine
@@ -35,8 +35,14 @@ The confirmed recovery export has 40 records. Rows 14, 15 and 26 (one-based) are
 
 ## Strategy sensitivity and debug settings
 
-The standalone v15 strategy now defaults to M5_Lookback 200, with the latest high/low allowed up to twice that age (400 M5 bars by default). Previous-pivot and FTB-expectation age checks still use M5_Lookback itself. FTB approach tolerance defaults to 50 ticks, and BT entry-close proximity to 0.382 defaults to 30 ticks; the BT fib-touch and FTB fib-bypass rules are unchanged. Tick size depends on the symbol.
+The standalone v15 strategy now defaults to M5_Lookback 200, with the latest high/low allowed up to twice that age (400 M5 bars by default). Previous-pivot and FTB-expectation age checks still use M5_Lookback itself. FTB now requires an exact touch or wick through the pivot (the former 50-tick approach setting was removed), and BT entry-close proximity to 0.382 defaults to 30 ticks; the BT fib-touch and FTB fib-bypass rules are unchanged. Tick size depends on the symbol.
 
-`Debug_M5` defaults on and shows the last available HA pivot high/low outside golden sessions; a plotted pivot is not necessarily an active HH/LL expectation. The Data Window's "count" plots are per-bar 1/NA flags, not cumulative counts. The panel shows HA index and high/low validity. Debug output does not enable the simulation or alter its session guards. These are sensitivity settings for investigation, not evidence of more correct setups or profitability.
+`Debug_M5` defaults on and shows the last available HA pivot high/low outside golden sessions; a plotted pivot is not necessarily an active HH/LL expectation. The Data Window's "count" plots are per-bar 1/NA flags, not cumulative counts. The panel shows the requested current-bar pivot boolean, not a daily pivot count. Debug output does not enable the simulation or alter its session guards. These are sensitivity settings for investigation, not evidence of more correct setups or profitability.
 
 Only `TradingBrain_M5_M1_v15.pine` has these new defaults. The separately supplied indicator and both MQL drafts retain their earlier settings and can produce different candidates; they have not been updated for parity. Pine compilation remains unverified.
+
+## New-pivot expectation experiment
+
+The strategy now accepts any new confirmed high or low pivot without comparing it to the previous high or low. The requested `expectedHighIndex[1]` / `expectedLowIndex[1]` comparisons are evaluated on the M1 chart: they create a one-M1-bar pulse when the previously confirmed M5 pivot first appears. As a result, FTB is only eligible on that first observation bar, not later attempts against an unchanged pivot; a pivot that first appears outside an enabled session is not carried into the session by this condition. The first available pivot may also be flagged when there is no previous index. This may reduce rather than increase signals. FTB now requires an actual touch or wick through the level, rather than a near miss; all existing colour, session and used-pivot guards remain. The bearish BT structural filter is unchanged.
+
+The `M5 Pivots Today` table value is exactly the requested `isNewHighPivot or isNewLowPivot` boolean on the current chart bar. It is **not a counter**, is not reset daily, and is not a setup or trade count. The data-window expectation flags are likewise 1/NA pulses rather than counts. Nothing guarantees 10–20 setups per day; the change has not been compiled or backtested in TradingView. The indicator and MQL drafts do not contain this pivot-expectation experiment.

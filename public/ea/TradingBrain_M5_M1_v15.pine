@@ -25,7 +25,6 @@ Order_Quantity = input.float(1.0, "Simulated quantity", minval=0.000001)
 Engulf_Multiplier = input.float(1.2, "Engulf body size multiplier", minval=1.0, maxval=10.0, step=0.1)
 Fib_Tolerance_Ticks = input.int(30, "0.382 entry proximity (ticks)", minval=0, maxval=1000)
 Use_FTB = input.bool(true, "Use experimental FTB path")
-FTB_Proximity_Ticks = input.int(50, "FTB approach proximity (ticks)", minval=0, maxval=1000)
 Require_HA_Color_Shift = input.bool(true, "Require preceding opposite HA colour for FTB")
 Debug_M5 = input.bool(true, "Show M5 HA debug")
 
@@ -64,11 +63,13 @@ validHaPrevHigh = not na(haPrevHigh) and not na(haPrevHighIndex) and not na(haIn
 // Part 3 BT bearish structure is a provisional Low -> LL -> LH pivot model.
 haBearStructure = validHaLow and validHaHigh and validHaPrevLow and validHaPrevHigh and haPrevLow > haSwingLow and haSwingHigh < haPrevHigh and haHighIndex > haLowIndex
 // PART 4 FTB - Failure to Break - HA colour shift + M5 close confirmation
-// Expectation = newest previously confirmed HA pivot high > previous high, or
-// newest previously confirmed HA pivot low < previous low. This is a tentative
-// visual HH/LL interpretation; pivot was available before the FTB candle.
-expectingBullBOS = not na(expectedHigh) and not na(expectedPrevHigh) and not na(expectedHighIndex) and not na(haIndex) and haIndex - expectedHighIndex <= M5_Lookback and expectedHigh > expectedPrevHigh
-expectingBearBOS = not na(expectedLow) and not na(expectedPrevLow) and not na(expectedLowIndex) and not na(haIndex) and haIndex - expectedLowIndex <= M5_Lookback and expectedLow < expectedPrevLow
+// Every newly observed, previously confirmed pivot can be an expectation;
+// no higher-high / lower-low comparison is required. The requested [1]
+// comparison is a one-M1-bar pulse, not a persistent pivot expectation.
+isNewHighPivot = not na(expectedHigh) and not na(expectedHighIndex) and (na(expectedHighIndex[1]) or expectedHighIndex != expectedHighIndex[1])
+isNewLowPivot = not na(expectedLow) and not na(expectedLowIndex) and (na(expectedLowIndex[1]) or expectedLowIndex != expectedLowIndex[1])
+expectingBullBOS = isNewHighPivot and not na(haIndex) and haIndex - expectedHighIndex <= M5_Lookback
+expectingBearBOS = isNewLowPivot and not na(haIndex) and haIndex - expectedLowIndex <= M5_Lookback
 
 // PART 2 + PART 3: M1 confirmed pivots approximate visual structure. For a bullish CHoCH,
 // the last confirmed high must be lower than the preceding confirmed high;
@@ -106,16 +107,15 @@ var float chochLevel = na
 var int entryBar = na
 bullBos = isGoldenSession and newHaM5 and validHaHigh and haClose > haSwingHigh and (na(usedHighPivot) or haHighIndex != usedHighPivot)
 bearBos = isGoldenSession and newHaM5 and haBearStructure and haClose < haSwingLow and (na(usedLowPivot) or haLowIndex != usedLowPivot)
-// Part 4: HH failure shifts bearish; LL failure shifts bullish. A wick may
+// Part 4: high-pivot failure shifts bearish; low-pivot failure shifts bullish. A wick may
 // cross the level, but close must return to its failure side. "Colour shift"
 // means prior HA candle was opposite-coloured. With the option off, the signal
 // candle must still close in the shifting direction; no prior colour required.
-ftbTolerance = FTB_Proximity_Ticks * syminfo.mintick
 // Do not call a previously observed successful BT on the same pivot a failure.
 // Only BOS events observed in the enabled session are tracked; this is not a
 // full reconstruction of all prior breaks outside the session.
-failedHigh = isGoldenSession and Use_FTB and newHaM5 and expectingBullBOS and haHigh >= expectedHigh - ftbTolerance and haClose < expectedHigh and haClose < haOpen and (not Require_HA_Color_Shift or haPriorClose > haPriorOpen) and (na(usedHighPivot) or expectedHighIndex != usedHighPivot) and (na(usedFtbHighPivot) or expectedHighIndex != usedFtbHighPivot)
-failedLow = isGoldenSession and Use_FTB and newHaM5 and expectingBearBOS and haLow <= expectedLow + ftbTolerance and haClose > expectedLow and haClose > haOpen and (not Require_HA_Color_Shift or haPriorClose < haPriorOpen) and (na(usedLowPivot) or expectedLowIndex != usedLowPivot) and (na(usedFtbLowPivot) or expectedLowIndex != usedFtbLowPivot)
+failedHigh = isGoldenSession and Use_FTB and newHaM5 and expectingBullBOS and haHigh >= expectedHigh and haClose < expectedHigh and haClose < haOpen and (not Require_HA_Color_Shift or haPriorClose > haPriorOpen) and (na(usedHighPivot) or expectedHighIndex != usedHighPivot) and (na(usedFtbHighPivot) or expectedHighIndex != usedFtbHighPivot)
+failedLow = isGoldenSession and Use_FTB and newHaM5 and expectingBearBOS and haLow <= expectedLow and haClose > expectedLow and haClose > haOpen and (not Require_HA_Color_Shift or haPriorClose < haPriorOpen) and (na(usedLowPivot) or expectedLowIndex != usedLowPivot) and (na(usedFtbLowPivot) or expectedLowIndex != usedFtbLowPivot)
 
 // PART 1 / 2 / 3 / 4: ordered state machine. One event of each type per M1 bar, used for markers. State updates only on
 // confirmed bars. Same-bar reaction/CHoCH/entry are deliberately disallowed:
@@ -265,5 +265,6 @@ if barstate.islast
     table.cell(panel, 1, 2, state, text_color=color.white, bgcolor=color.black)
     table.cell(panel, 0, 3, "Path / anchor", text_color=color.white, bgcolor=color.black)
     table.cell(panel, 1, 3, setupType == "FTB" ? "FTB: REVIEW" : direction == -1 ? "BT BEAR: REVIEW" : direction == 1 ? "BT BULL: REVIEW" : "UNAVAILABLE", text_color=color.white, bgcolor=color.black)
-    table.cell(panel, 0, 4, Debug_M5 ? "M5 HA Events" : "", text_color=color.white, bgcolor=color.black)
-    table.cell(panel, 1, 4, Debug_M5 ? str.tostring(haIndex) + " | BH:" + str.tostring(validHaHigh) + " BL:" + str.tostring(validHaLow) : "", text_color=color.white, bgcolor=color.black)
+    // This requested display is a current-bar boolean, not a daily count.
+    table.cell(panel, 0, 4, Debug_M5 ? "M5 Pivots Today" : "", text_color=color.white, bgcolor=color.black)
+    table.cell(panel, 1, 4, Debug_M5 ? str.tostring(isNewHighPivot or isNewLowPivot) : "", text_color=color.white, bgcolor=color.black)
