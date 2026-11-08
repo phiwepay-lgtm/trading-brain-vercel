@@ -28,6 +28,11 @@ test('download center exports matching source files and unavailable stats withou
   const v15Zip=await JSZip.loadAsync(await readFile((await v15DownloadZip.path())!));
   expect(Object.values(v15Zip.files).filter(f=>!f.dir).map(f=>f.name).sort()).toEqual(['Docs/AUDIT-40records.txt','Docs/CHANGELOG-v15-BT-FTB.md','MQ5/TradingBrain_Tester_v15.mq5','MQ5/TradingBrain_v15.mq5','Pine/TradingBrain_Indicator_v15.pine','Pine/TradingBrain_M5_M1_v15.pine']);
   expect(await v15Zip.file('Pine/TradingBrain_M5_M1_v15.pine')!.async('string')).toBe(await readFile((await v15.path())!,'utf8'));
+  const mt5Pending=page.waitForEvent('download');await page.getByRole('link',{name:'Download MT5 Tester Kit (.zip)'}).click();const mt5Download=await mt5Pending;
+  expect(mt5Download.suggestedFilename()).toBe('TradingBrain-MT5-v153-Tester.zip');
+  const mt5Zip=await JSZip.loadAsync(await readFile((await mt5Download.path())!));
+  expect(Object.values(mt5Zip.files).filter(f=>!f.dir).map(f=>f.name).sort()).toEqual(['Docs/MT5-Strategy-Tester-Guide.md','Experts/TradingBrain_Tester_v153.mq5','Presets/TradingBrain_v153_BT_Only.set','Presets/TradingBrain_v153_BT_RR2.set','Presets/TradingBrain_v153_BT_RR5.set','Presets/TradingBrain_v153_BT_RR7.set','Presets/TradingBrain_v153_Both.set','Presets/TradingBrain_v153_FTB_Only.set']);
+  expect(await mt5Zip.file('Experts/TradingBrain_Tester_v153.mq5')!.async('string')).toContain('Strategy Tester only; no live or demo operation');
   const zip=await packageDownload(page);
   expect(await zip.file('TradingBrain_Strategy.pine')!.async('string')).toBe(expectedStrategy);
   expect(await zip.file('TradingBrain_GOLD_M1_VLB_VHB.pine')!.async('string')).toBe(expectedPine);
