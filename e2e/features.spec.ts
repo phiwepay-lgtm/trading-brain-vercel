@@ -53,20 +53,20 @@ test('upload validates files and communicates errors', async ({ page }) => {
 test('EA downloads, install guide and HOLD-only signal endpoint', async ({ page, request }) => {
   await page.goto('/ea');
   const sourceDownload = page.waitForEvent('download');
-  await page.getByRole('link', { name: 'Download EA (.mq5)' }).click();
-  expect((await sourceDownload).suggestedFilename()).toBe('TradingBrain.mq5');
+  await page.getByRole('link', { name: 'Download Tester EA (.mq5)' }).click();
+  expect((await sourceDownload).suggestedFilename()).toBe('TradingBrain_Tester_v153.mq5');
   const readmeDownload = page.waitForEvent('download');
   await page.getByRole('link', { name: 'Download Instructions' }).click();
   expect((await readmeDownload).suggestedFilename()).toBe('README.txt');
-  const source = await (await request.get('/ea/TradingBrain.mq5')).text();
-  expect(source).toContain('input bool Enable_Visual_Scanner = false');
-  expect(source).toContain('input bool Use_M5_Filter = true');
+  const source = await (await request.get('/ea/TradingBrain_Tester_v153.mq5')).text();
+  expect(source).toContain('input bool Enable_Simulation = false');
+  expect(source).toContain('input bool Enable_StrategyTester_Orders = false');
+  expect(source).toContain('Strategy Tester only; no live or demo operation');
   expect(source).not.toContain('WebRequest(');
-  expect(source).not.toContain('OrderSend(');
   expect(await (await request.get('/api/signal')).json()).toMatchObject({ action: 'HOLD', confidence: null });
   await page.getByRole('link', { name: /OPEN THE FULL INSTALL GUIDE/ }).click();
   await expect(page).toHaveURL(/\/ea\/guide$/);
-  await expect(page.getByText('Open a demo chart')).toBeVisible();
+  await expect(page.getByText('Open Strategy Tester')).toBeVisible();
   await page.getByRole('link', { name: /BACK TO EA CENTER/ }).click();
   await expect(page).toHaveURL(/\/ea$/);
 });

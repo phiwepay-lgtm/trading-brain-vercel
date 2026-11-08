@@ -6,7 +6,7 @@ test('downloads five local specification files with the current hypothetical rat
   await page.goto('/dashboard');
   await page.locator('.journal-view input[type=file]').setInputFiles({name:'private.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify([{status:'Full TP',outcome:'win',notes:'PRIVATE-JOURNAL-NOTE',pnl:12}]))});
   const slider=page.getByLabel('Target reward per 1R risk');await slider.focus();await slider.press('Home');await slider.press('ArrowUp');
-  const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Download EA Package (ZIP)'}).click();
+  const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Download legacy EA Package (ZIP)'}).click();
   const download=await downloadPromise;expect(download.suggestedFilename()).toBe('TradingBrain_Full_Package.zip');
   const zip=await JSZip.loadAsync(await readFile((await download.path())!));expect(Object.keys(zip.files).sort()).toEqual(['README.txt','TradingBrain.mq5','TradingBrain_GOLD_M1_VLB_VHB.pine','TradingBrain_Strategy.pine','system.json']);
   const json=await zip.file('system.json')!.async('string');const system=JSON.parse(json);
