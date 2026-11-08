@@ -1,28 +1,33 @@
 'use client';
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ColorType, createChart, CrosshairMode, type IChartApi, type ISeriesApi, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { ema, heikinAshi } from '../../lib/chart-math.mjs';
+import type { JournalMarker } from '../../lib/journal-markers';
 
 export type Bar = { time: number; open: number; high: number; low: number; close: number; volume: number | null };
 type Point = { time: number; price: number };
 type Shape = { id: string; kind: string; a: Point; b?: Point; text?: string };
 export type Marker = { time: number; price: number; label: string; color: string };
 type PaneHandle = { crosshair: (time: number | null, price: number) => void; range: (range: { from: Time; to: Time }) => void; copyDrawings: () => Shape[]; addDrawings: (drawings: Shape[]) => void; screenshot: () => void };
-type Props = { source: string; focus: {time: number; approximate: boolean} | null; symbol: string; timeframe: 'M1' | 'M5'; bars: Bar[]; markers: Marker[]; onCrosshair: (source: string, time: number | null, price: number) => void; onRange: (source: string, range: { from: Time; to: Time }) => void; onHistory: () => void; hasMore: boolean; loadingMore: boolean; onCopy?: () => void };
+type Props = { source: string; focus: {time: number; approximate: boolean} | null; symbol: string; timeframe: 'M1' | 'M5'; bars: Bar[]; markers: Marker[]; journalMarkers: JournalMarker[]; onCrosshair: (source: string, time: number | null, price: number) => void; onRange: (source: string, range: { from: Time; to: Time }) => void; onHistory: () => void; hasMore: boolean; loadingMore: boolean; onCopy?: () => void };
 const tools = [['cursor', '↖', 'Cursor'], ['trend', '╱', 'Trendline'], ['horizontal', '━', 'Horizontal line'], ['fib', '≋', 'Fibonacci'], ['rectangle', '▭', 'Rectangle'], ['text', 'T', 'Text'], ['eraser', '⌫', 'Eraser']];
 const colors = { upColor: '#26c7a2', downColor: '#f46d7b', borderUpColor: '#26c7a2', borderDownColor: '#f46d7b', wickUpColor: '#26c7a2', wickDownColor: '#f46d7b' };
 
-const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, focus, symbol, timeframe, bars, markers, onCrosshair, onRange, onHistory, hasMore, loadingMore, onCopy }, ref) {
+const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, focus, symbol, timeframe, bars, markers, journalMarkers, onCrosshair, onRange, onHistory, hasMore, loadingMore, onCopy }, ref) {
   const host = useRef<HTMLDivElement>(null), overlay = useRef<HTMLCanvasElement>(null);
   const chart = useRef<IChartApi | null>(null), candles = useRef<ISeriesApi<'Candlestick'> | null>(null), line = useRef<ISeriesApi<'Line'> | null>(null);
-  const barsRef = useRef(bars), hooks = useRef({ onCrosshair, onRange, onHistory }), skipSync = useRef(false), previous = useRef<{ bars: Bar[]; ha: boolean; enabled: boolean } | null>(null);
+  const barsRef = useRef(bars), hooks = useRef({ onCrosshair, onRange, onHistory }), skipSync = useRef(false), suppressRange = useRef(false), rangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null), previous = useRef<{ bars: Bar[]; ha: boolean; enabled: boolean } | null>(null);
   const [ha, setHa] = useState(timeframe === 'M5'), [indicator, setIndicator] = useState(true), [tool, setTool] = useState('cursor');
   const [shapes, setShapes] = useState<Shape[]>([]), [anchor, setAnchor] = useState<Point | null>(null), [hover, setHover] = useState<Point | null>(null);
   const [legend, setLegend] = useState('');
+  const [tooltip, setTooltip] = useState<{text:string;x:number;y:number}|null>(null);
   const storageKey = `trading-brain-drawings-v1:${symbol}:${timeframe}`;
   const shapesRef = useRef(shapes); shapesRef.current = shapes; barsRef.current = bars; hooks.current = { onCrosshair, onRange, onHistory };
   const seconds = timeframe === 'M5' ? 300 : 60, period = timeframe === 'M5' ? 21 : 9;
   const decimals = symbol === 'EURUSD' ? 5 : 2;
+  const plotted = useMemo(() => { const available = new Set(bars.map(b => b.time)); return journalMarkers.map(m => ({...m, barTime:Math.floor(m.time / seconds)*seconds})).filter(m => available.has(m.barTime)).sort((a,b) => a.barTime-b.barTime || a.id.localeCompare(b.id)); }, [journalMarkers,bars,seconds]);
+  const tooltipMap = useRef(new Map<string,string>()); tooltipMap.current = new Map(plotted.map(m => [m.id,m.tooltip]));
+  const tooltipTimes = useRef(new Map<number,string[]>()); tooltipTimes.current = new Map(); for (const m of plotted) tooltipTimes.current.set(m.barTime, [...(tooltipTimes.current.get(m.barTime) ?? []),m.tooltip]);
 
   useEffect(() => { try { const val = JSON.parse(localStorage.getItem(storageKey) || '[]'); setShapes(Array.isArray(val) ? val.filter(x => x && typeof x.kind === 'string' && Number.isFinite(x.a?.time) && Number.isFinite(x.a?.price)).slice(0, 500) : []); } catch { setShapes([]); } }, [storageKey]);
   const save = useCallback((next: Shape[]) => { setShapes(next); try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {} }, [storageKey]);
@@ -56,6 +61,10 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
     const emaLine = api.addLineSeries({ color: timeframe === 'M5' ? '#5595ff' : '#f7cb58', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, priceFormat: { type: 'price', precision: decimals, minMove: Math.pow(10, -decimals) } });
     chart.current = api; candles.current = series; line.current = emaLine;
     api.subscribeCrosshairMove(param => {
+      const found = typeof param.hoveredObjectId === 'string' ? tooltipMap.current.get(param.hoveredObjectId) : undefined;
+      const atTime = typeof param.time === 'number' ? tooltipTimes.current.get(param.time) : undefined;
+      const description = found || (atTime?.length ? atTime.slice(0,3).join(' • ') + (atTime.length > 3 ? ` • +${atTime.length - 3} more; see marker list` : '') : undefined);
+      setTooltip(description && param.point ? {text:description,x:param.point.x,y:param.point.y} : null);
       const b = param.seriesData.get(series) as { open?: number; high?: number; low?: number; close?: number } | undefined;
       const e = param.seriesData.get(emaLine) as { value?: number } | undefined;
       if (b?.open !== undefined) setLegend(`O ${b.open.toFixed(decimals)}  H ${b.high!.toFixed(decimals)}  L ${b.low!.toFixed(decimals)}  C ${b.close!.toFixed(decimals)}${e?.value !== undefined ? `  EMA ${e.value.toFixed(decimals)}` : ''}`);
@@ -64,11 +73,11 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
       const price = param.point ? series.coordinateToPrice(param.point.y) : null;
       hooks.current.onCrosshair(timeframe, typeof param.time === 'number' ? param.time : null, price ?? 0);
     });
-    api.timeScale().subscribeVisibleTimeRangeChange(range => { drawRef.current(); if (!skipSync.current && range) hooks.current.onRange(timeframe, range); });
+    api.timeScale().subscribeVisibleTimeRangeChange(range => { drawRef.current(); if (!skipSync.current && !suppressRange.current && range) hooks.current.onRange(timeframe, range); });
     api.timeScale().subscribeVisibleLogicalRangeChange(range => { if (range && range.from < 40) hooks.current.onHistory(); drawRef.current(); });
     const redraw = () => requestAnimationFrame(() => drawRef.current());
     const el = host.current; el.addEventListener('pointermove', redraw); el.addEventListener('wheel', redraw); const resize = new ResizeObserver(redraw); resize.observe(el);
-    return () => { el.removeEventListener('pointermove', redraw); el.removeEventListener('wheel', redraw); resize.disconnect(); chart.current = null; candles.current = null; line.current = null; api.remove(); };
+    return () => { el.removeEventListener('pointermove', redraw); el.removeEventListener('wheel', redraw); resize.disconnect(); if (rangeTimer.current) clearTimeout(rangeTimer.current); chart.current = null; candles.current = null; line.current = null; api.remove(); };
   }, [timeframe, decimals]);
 
   useEffect(() => {
@@ -82,10 +91,11 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
     previous.current = { bars, ha, enabled: indicator }; requestAnimationFrame(() => drawRef.current());
   }, [bars, ha, indicator, period]);
   useEffect(() => { draw(); }, [draw]);
+  useEffect(() => { candles.current?.setMarkers(plotted.map(m => ({time:m.barTime as UTCTimestamp, position:m.side === 'BUY' ? 'belowBar' : 'aboveBar', shape:m.side === 'BUY' ? 'arrowUp' : 'arrowDown', color:m.side === 'BUY' ? '#35ddb1' : '#ff7181', id:m.id}))); setTooltip(null); }, [plotted]);
 
   useImperativeHandle(ref, () => ({
     crosshair(time, price) { const api = chart.current, c = candles.current; if (!api || !c) return; skipSync.current = true; if (time === null) api.clearCrosshairPosition(); else { const bucket = Math.floor(time / seconds) * seconds; if (barsRef.current.some(b => b.time === bucket)) api.setCrosshairPosition(price, bucket as UTCTimestamp, c); else api.clearCrosshairPosition(); } skipSync.current = false; },
-    range(range) { if (!chart.current) return; skipSync.current = true; try { chart.current.timeScale().setVisibleRange(range); } catch {} skipSync.current = false; },
+    range(range) { if (!chart.current) return; suppressRange.current = true; if (rangeTimer.current) clearTimeout(rangeTimer.current); try { chart.current.timeScale().setVisibleRange(range); } catch {} rangeTimer.current = setTimeout(() => { suppressRange.current = false; }, 150); },
     copyDrawings() { return shapesRef.current; },
     addDrawings(incoming) { save([...shapesRef.current, ...incoming.map(s => ({ ...s, id: crypto.randomUUID() }))].slice(-500)); },
     screenshot() { const image = chart.current?.takeScreenshot(), layer = overlay.current; if (!image || !layer) return; const ctx = image.getContext('2d'); ctx?.drawImage(layer, 0, 0, image.width, image.height); const link = document.createElement('a'); link.download = `${symbol}-${timeframe}.png`; link.href = image.toDataURL('image/png'); link.click(); },
@@ -109,8 +119,8 @@ const ChartPane = forwardRef<PaneHandle, Props>(function ChartPane({ source, foc
   };
   return <section className="chart-pane" aria-label={`${timeframe} chart`}>
     <div className="pane-head"><div><div className="pane-title">{timeframe} <span>—</span> {ha ? 'Heiken Ashi' : 'Candles'} <span>—</span> {indicator ? `${period} EMA` : 'EMA off'}</div><div className="pane-sub">{symbol} <span>·</span> {ha ? 'Heiken Ashi candles' : source === 'demo' ? 'Simulated OHLC' : source === 'binance' ? 'Proxy OHLC' : 'Provider OHLC'} <span>·</span> {legend || 'Hover for OHLC & EMA'}</div></div><div className="pane-controls"><button onClick={() => setHa(v => !v)} title="Switch candle type">{ha ? 'HA' : 'OHLC'} ▾</button><button onClick={() => setIndicator(v => !v)} aria-pressed={indicator}>EMA {indicator ? 'on' : 'off'}</button><button onClick={() => ref && typeof ref !== 'function' && ref.current?.screenshot()} title="Download screenshot">↓</button></div></div>
-    <div className="pane-body"><div className="draw-toolbar" aria-label={`${timeframe} drawing tools`}>{tools.map(([key, icon, title]) => <button key={key} title={title} aria-label={`${timeframe} ${title}`} aria-pressed={tool === key} onClick={() => { setTool(key); setAnchor(null); setHover(null); }}>{icon}</button>)}{onCopy && <button title="Copy drawings to M5" aria-label="Copy M1 drawings to M5" onClick={onCopy}>⇥</button>}</div><div className="chart-area"><div className="chart-host" ref={host} />{source === 'demo' && <div className="demo-watermark">DEMO · SIMULATED</div>}{source === 'binance' && <div className="demo-watermark proxy-watermark">{symbol === 'XAUUSD' ? 'PAXG/USDT PROXY' : 'BTC/USDT PROXY'}</div>}<canvas className="drawing-layer" ref={overlay} style={{ pointerEvents: tool === 'cursor' ? 'none' : 'auto', cursor: tool === 'eraser' ? 'not-allowed' : 'crosshair' }} onPointerDown={pick} onPointerMove={e => { if (anchor) setHover(pointAt(e)); }} />{!bars.length && <div className="chart-empty">No market data to display</div>}<button className="history-button" disabled={!hasMore || loadingMore || !bars.length} onClick={onHistory}>{loadingMore ? 'Loading…' : hasMore ? '← Earlier candles' : 'No earlier data'}</button></div></div>
-    <div className="pane-foot"><span>{tool === 'cursor' ? 'Scroll to zoom · drag to pan' : `${tools.find(t => t[0] === tool)?.[2]} selected · ${anchor ? 'choose second point' : 'click chart'}`}</span><a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a></div>
+    <div className="pane-body"><div className="draw-toolbar" aria-label={`${timeframe} drawing tools`}>{tools.map(([key, icon, title]) => <button key={key} title={title} aria-label={`${timeframe} ${title}`} aria-pressed={tool === key} onClick={() => { setTool(key); setAnchor(null); setHover(null); }}>{icon}</button>)}{onCopy && <button title="Copy drawings to M5" aria-label="Copy M1 drawings to M5" onClick={onCopy}>⇥</button>}</div><div className="chart-area"><div className="chart-host" ref={host} />{source === 'demo' && <div className="demo-watermark">DEMO · SIMULATED</div>}{source === 'binance' && <div className="demo-watermark proxy-watermark">{symbol === 'XAUUSD' ? 'PAXG/USDT PROXY' : 'BTC/USDT PROXY'}</div>}{tooltip && <div className="marker-tooltip" role="tooltip" style={{left:Math.max(4,Math.min(tooltip.x+12,(host.current?.clientWidth ?? 300)-240)),top:Math.max(4,tooltip.y-45)}}>{tooltip.text}</div>}<canvas className="drawing-layer" ref={overlay} style={{ pointerEvents: tool === 'cursor' ? 'none' : 'auto', cursor: tool === 'eraser' ? 'not-allowed' : 'crosshair' }} onPointerDown={pick} onPointerMove={e => { if (anchor) setHover(pointAt(e)); }} />{!bars.length && <div className="chart-empty">No market data to display</div>}<button className="history-button" disabled={!hasMore || loadingMore || !bars.length} onClick={onHistory}>{loadingMore ? 'Loading…' : hasMore ? '← Earlier candles' : 'No earlier data'}</button></div></div>
+    <div className="pane-foot"><span>{tool === 'cursor' ? 'Scroll to zoom · drag to pan' : `${tools.find(t => t[0] === tool)?.[2]} selected · ${anchor ? 'choose second point' : 'click chart'}`}</span><details className="marker-list"><summary aria-label={`${timeframe} trade markers`}>{plotted.length} trade markers in loaded candles</summary>{plotted.length > 0 && <ul>{plotted.map(m=><li key={m.id}>{new Date(m.time*1000).toISOString()} · {m.side} · {m.tooltip}</li>)}</ul>}</details><a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a></div>
   </section>;
 });
 export default ChartPane;
