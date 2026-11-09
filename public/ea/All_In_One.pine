@@ -8,7 +8,7 @@
 // Each component has its own input group and can be switched off so you only
 // run what you need. This script has NOT been compiled or verified in TradingView.
 // On a Basic plan keep heavy parts disabled to stay within the 20-second limit.
-indicator("Trading Brain — All In One [Dark Orders + Anchor + Session + NQ]", shorttitle="TB All-In-One", overlay=true, max_bars_back=2000, max_boxes_count=200, max_lines_count=500, max_labels_count=500)
+indicator("Trading Brain — All In One [Dark Orders + Anchor + Session + NQ]", shorttitle="All In 1", overlay=true, max_bars_back=2000, max_boxes_count=200, max_lines_count=500, max_labels_count=500)
 
 // ============================== 1. DARK ORDERS ==============================
 gD = "Dark Orders"
@@ -53,6 +53,10 @@ barcolor(showDark ? (darkBull ? bullCol : darkBear ? bearCol : isUnusual ? warnC
 plotshape(showDark and darkBull, "DARK+ Pure", style=shape.labelup, text="DARK+ PURE", location=location.belowbar, color=color.lime, textcolor=color.black, size=size.tiny)
 plotshape(showDark and darkBear, "DARK- Pure", style=shape.labeldown, text="DARK- PURE", location=location.abovebar, color=color.red, textcolor=color.white, size=size.tiny)
 
+// Alerts must be at the top level, not inside an if block.
+alertcondition(showDark and darkBull, "Dark Bull History", "DARK+ Pure printed")
+alertcondition(showDark and darkBear, "Dark Bear History", "DARK- Pure printed")
+
 // Record confirmed directional signals across the loaded chart history.
 var int bullCount = 0
 var int bearCount = 0
@@ -95,9 +99,6 @@ if showDark and barstate.islast
         table.cell(recap, 2, tableLookback + 1, "BEAR: " + str.tostring(bearCount), text_color=color.red, text_size=size.tiny)
 
 // * Times are bar-open times in the symbol's exchange timezone.
-if showDark
-    alertcondition(darkBull, "Dark Bull History", "DARK+ Pure printed")
-    alertcondition(darkBear, "Dark Bear History", "DARK- Pure printed")
 
 // ====================== 2. TREND PREDICTOR ANCHOR (Zeiierman) ======================
 // Adapted from Rolling Candle Profile with Buy/Sell Signals by Zeiierman.
@@ -228,7 +229,7 @@ if showNQ and barstate.islast
     if not timeframe.isintraday or timeframe.in_seconds() < 60 or timeframe.in_seconds() > 3600
         table.cell(status, 0, 0, "Use standard intraday candles, 1m–1h", text_color=color.white, bgcolor=color.red)
     else
-        int anchor = f_anchor(time)
+        int sessAnchor = f_anchor(time)
         int found = 0
         float hi = na
         float lo = na
@@ -241,7 +242,7 @@ if showNQ and barstate.islast
             hi := na(hi) ? high[i] : math.max(hi, high[i])
             lo := na(lo) ? low[i] : math.min(lo, low[i])
             missingVolume := missingVolume or na(volume[i])
-        bool truncated = found == maxBars and bar_index + 1 > maxBars and f_anchor(time[maxBars]) == anchor
+        bool truncated = found == maxBars and bar_index + 1 > maxBars and f_anchor(time[maxBars]) == sessAnchor
         bool historyStart = found == bar_index + 1
         float span = hi - lo
         array<float> ups = array.new_float(rows, 0.0)
