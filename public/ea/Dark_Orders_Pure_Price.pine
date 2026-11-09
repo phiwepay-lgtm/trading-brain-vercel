@@ -34,9 +34,9 @@ isUnusual = isRangeUnusual and isBodyUnusual
 darkBull = isUnusual and haExpanding and close > open
 darkBear = isUnusual and haExpanding and close < open
 
-bullCol = color.new(color.lime, 10)
-bearCol = color.new(color.red, 10)
-warnCol = color.new(color.orange, 20)
+bullCol = color.new(#00E5FF, 10)
+bearCol = color.new(#FF3D57, 10)
+warnCol = color.new(color.orange, 30)
 barcolor(darkBull ? bullCol : darkBear ? bearCol : isUnusual ? warnCol : na, title="Pure Price Paint")
 
 plotshape(darkBull, "DARK+ Pure", style=shape.labelup, text="DARK+ PURE", location=location.belowbar, color=color.lime, textcolor=color.black, size=size.tiny)
