@@ -2,7 +2,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {readFileSync}=require('node:fs');
-const path='public/ea/TradingBrain_Pro_V1_';
+const path='reference/legacy-ea/superseded-pro-v1/TradingBrain_Pro_V1_';
 const read=name=>readFileSync(path+name,'utf8');
 
 test('Pine drafts keep BT reaction and FTB bypass, without the old entry proximity gate',()=>{
