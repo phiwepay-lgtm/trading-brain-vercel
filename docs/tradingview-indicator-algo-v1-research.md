@@ -70,3 +70,5 @@ The repository includes synthetic state-machine tests using a C++-adapted copy o
 ## Corrected V3 visual study draft
 
 `TradingView_Algo_V3_Study_Indicator.pine` is a separate study version based on the V2 research sequence, not the unchanged V3 reference. It uses the immediately-next-M1-candle engulf requirement, orange M5 HA anchor plots, yellow CHoCH lines, and bounded red risk / blue 5R boxes. The boxes show hypothetical levels, not fills. It does not assert that the user-provided 4273/4265 example matches, and it does not solve the underlying discretionary pivot/FTB ambiguity or establish TradingView compilation. The original user-supplied V3 remains separately downloadable as a reference with its limitations documented above.
+
+The V2 study indicator and strategy and V3 visual study use Pine v6. Static requests remain explicit, and the strategy retains the v5 zero-margin defaults; the separately preserved user reference remains v5. The migration has not been compiled or compared in TradingView.

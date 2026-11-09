@@ -19,7 +19,7 @@ test('Algo V1 exposes a restricted price-action research draft', () => {
 
 const strategy = fs.readFileSync('public/ea/TradingView_Algo_V2_Study_Strategy.pine', 'utf8');
 test('strategy uses native simulated orders alongside the same provisional signals', () => {
-  assert.match(strategy, /^\/\/@version=5\r?\nstrategy\(/);
+  assert.match(strategy, /^\/\/@version=6\r?\nstrategy\(/);
   for (const s of ['process_orders_on_close=true', 'strategy.entry("Long", strategy.long)', 'strategy.entry("Short", strategy.short)', 'strategy.exit("Long bracket"', 'strategy.exit("Short bracket"', 'strategy.close_all(comment="Gap: result unreliable"', 'nativeStop := nativeEntry', 'event := trend == 1 ? -2 : 2', 'bullEngulf', 'bearEngulf']) assert.ok(strategy.includes(s), `Missing ${s}`);
 });
 
@@ -105,4 +105,26 @@ test('structure exit is available in both Pine scripts and the MT5 tester', () =
 test('corrected V3 study retains the provisional sequence and bounded visual boxes', () => {
   const v3=fs.readFileSync('public/ea/TradingView_Algo_V3_Study_Indicator.pine','utf8');
   for(const s of ['TradingView Algo V3 Study Indicator - Research', 'bar_index == waitFrom + 1', 'Fixed TP + structure', 'color=color.yellow, style=line.style_dashed', 'box riskBox = box.new', 'box rewardBox = box.new', 'array.size(riskBoxes) > studyDrawCount * 2']) assert.ok(v3.includes(s), `Missing ${s}`);
+});
+
+test('study-level labels avoid the reserved Pine identifier text', () => {
+  const v3=fs.readFileSync('public/ea/TradingView_Algo_V3_Study_Indicator.pine','utf8');
+  for (const src of [pine,strategy,v3]) {
+    assert.match(src, /f_studyLevel\(float price, string levelText, color col\)/);
+    assert.match(src, /label\.new\(bar_index \+ studyWidth, price, levelText,/);
+    assert.doesNotMatch(src, /f_studyLevel\([^\n]*\bstring\s+text\b/);
+  }
+});
+
+
+test('study scripts use Pine v6 while preserving v5 request and strategy margin defaults', () => {
+  const v3 = fs.readFileSync('public/ea/TradingView_Algo_V3_Study_Indicator.pine', 'utf8');
+  for (const src of [pine, strategy, v3]) {
+    assert.match(src, /^\/\/@version=6\r?\n/);
+    assert.match(src, /dynamic_requests=false/);
+  }
+  assert.match(strategy, /margin_long=0, margin_short=0/);
+  const page = fs.readFileSync('app/ea/download-center.tsx', 'utf8');
+  assert.ok(page.includes('`//@version=${version}\\n${declaration}'));
+  assert.ok(page.includes('titlePrefix="M5 HA Brain V3" version={5}'));
 });

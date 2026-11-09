@@ -1,5 +1,5 @@
-//@version=5
-indicator("TradingView Algo V3 Study Indicator - Research", shorttitle="Algo V3", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+//@version=6
+indicator("TradingView Algo V3 Study Indicator - Research", shorttitle="Algo V3", overlay=true, dynamic_requests=false, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
 // RESEARCH DRAFT. Unverified interpretation of discretionary rules, not an EA.
 // Use STANDARD M1 for entries and virtual positions. M5 HA calculations use
@@ -320,9 +320,9 @@ var array<label> studyLabels = array.new_label()
 var array<line> breakLines = array.new_line()
 var array<box> riskBoxes = array.new_box()
 
-f_studyLevel(float price, string text, color col) =>
+f_studyLevel(float price, string levelText, color col) =>
     line ln = line.new(bar_index, price, bar_index + studyWidth, price, color=col, style=line.style_dotted)
-    label lab = label.new(bar_index + studyWidth, price, text, style=label.style_label_left, size=size.tiny, color=color.new(col, 65), textcolor=color.white)
+    label lab = label.new(bar_index + studyWidth, price, levelText, style=label.style_label_left, size=size.tiny, color=color.new(col, 65), textcolor=color.white)
     array.push(studyLines, ln)
     array.push(studyLabels, lab)
     if array.size(studyLines) > studyDrawCount * 7

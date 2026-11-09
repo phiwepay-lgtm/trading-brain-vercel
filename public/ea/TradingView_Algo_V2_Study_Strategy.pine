@@ -1,5 +1,5 @@
-//@version=5
-strategy("TradingView Algo V2 Study Strategy - Research", shorttitle="Algo V1 S", overlay=true, max_labels_count=500, max_lines_count=500, pyramiding=0, process_orders_on_close=true, initial_capital=100000)
+//@version=6
+strategy("TradingView Algo V2 Study Strategy - Research", shorttitle="Algo V1 S", overlay=true, dynamic_requests=false, max_labels_count=500, max_lines_count=500, pyramiding=0, process_orders_on_close=true, initial_capital=100000, margin_long=0, margin_short=0)
 
 // RESEARCH DRAFT. Unverified interpretation of discretionary rules, not an EA.
 // Native Strategy Tester orders are simulated and differ from virtual positions.
@@ -360,9 +360,9 @@ var array<line> studyLines = array.new_line()
 var array<label> studyLabels = array.new_label()
 var array<line> breakLines = array.new_line()
 
-f_studyLevel(float price, string text, color col) =>
+f_studyLevel(float price, string levelText, color col) =>
     line ln = line.new(bar_index, price, bar_index + studyWidth, price, color=col, style=line.style_dotted)
-    label lab = label.new(bar_index + studyWidth, price, text, style=label.style_label_left, size=size.tiny, color=color.new(col, 65), textcolor=color.white)
+    label lab = label.new(bar_index + studyWidth, price, levelText, style=label.style_label_left, size=size.tiny, color=color.new(col, 65), textcolor=color.white)
     array.push(studyLines, ln)
     array.push(studyLabels, lab)
     if array.size(studyLines) > studyDrawCount * 7
