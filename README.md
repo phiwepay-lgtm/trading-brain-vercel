@@ -119,17 +119,13 @@ npm run test:vision
 
 This runs a local test-only mocked OpenAI response. Browser tests mock the provider too; neither test verifies a real provider account.
 
-## MT5 and Pine visual scanner sources
+## EA Center
 
-`/ea` provides `TradingBrain.mq5`, `TradingBrain_GOLD_M1_VLB_VHB.pine` and `README.txt`. Both scanners are **disabled by default**, visual only, and contain no order or network functions. The app endpoint `/api/signal` remains HOLD and the website does not connect to MT5 or run scans. The MQL source has not been compiled or broker-tested; the Pine source has not been compiled in TradingView. No EX5 is supplied.
+`/ea` currently has no downloadable tools. The former research drafts are archived in `reference/retired-ea` and are not served as downloads. The `/api/signal` endpoint remains HOLD-only; the website does not connect to MT5.
 
-When enabled on an M1 chart, both sources use the previous completed M5 candle and the preceding 50-bar M5 range. The close above the high-minus-0.382 level gives a bearish proxy; close below low-plus-0.382 gives a bullish proxy; otherwise neutral. The BT/FTB labels are **bias proxies**, not detection of the real break-test or failure-to-break. The M1 visual candidate is an opposite-color body engulfing the previous body at or beyond the preceding five bars' high (sell) or low (buy). It requires contiguous, completed M1 candles. This deliberately simple candidate is **not** confirmation of the earlier specified BOS/CHoCH, pullback, engulf-to-new-low/high, or M5 structural sequence. Inputs permit changing lookbacks and turning off the M5 filter; disabling the filter explicitly permits unfiltered candidates. Neutral or missing M5 data with the filter on yields HOLD. Pine uses non-repainting completed M5 values; MT5 uses the same M1 bar-open alignment. Both can differ due to feeds and historical data.
+### Historical scanner and package notes
 
-Pine draws two 80%-transparent bands at the formula levels and a top-right dashboard; MT5 uses outlined rectangles. The band half-width is a configurable visual tick/point padding, not a measured zone, FVG, or stop. The Pine table's 40/PF 4.76/WR 27.5% row is a fixed **user claim**, not verified performance and not read from the uploaded journal. The conflicting NY 17:00 and earlier 14:00–16:00 claims remain unverified.
-
-### Full package
-
-The dashboard's **Download EA Package (ZIP)** and Download Center's **Download Full Package (ZIP)** assemble the same five files in the browser: `TradingBrain.mq5`, `TradingBrain_GOLD_M1_VLB_VHB.pine`, `TradingBrain_Strategy.pine`, `system.json` and `README.txt`. The dashboard includes its hypothetical R:R selection; the Download Center does not access that slider. `system.json` contains aggregate-only descriptive statistics from the browser journal, never raw records; it reports unavailable data if no journal is uploaded. The figures are not broker-verified and do not replace the verified 33-trade summary. R:R calculations remain hypothetical, not a backtest.
+The following notes describe older research drafts, not current EA Center downloads.
 
 ### Separate TradingView Strategy Tester source
 

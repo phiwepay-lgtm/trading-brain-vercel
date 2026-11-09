@@ -1,15 +1,22 @@
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, BookOpen, Check, Code2, FileCode2, Laptop, ShieldAlert, TerminalSquare, Workflow } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileCode2 } from 'lucide-react';
 import '../features.css';
 import DownloadCenter from './download-center';
 
 export default function EaPage() {
-  return <div className="feature-page"><header className="feature-topbar"><Link href="/dashboard" className="feature-back"><ArrowLeft size={15} /> BACK TO DASHBOARD</Link><span>TRADING BRAIN <i>/</i> RESEARCH TOOLS</span><Link href="/chart">OPEN CHART <ArrowRight size={13} /></Link></header>
-    <main className="feature-content"><div className="feature-heading"><div><div className="feature-eyebrow"><span /> THE TRADING BRAIN / TOOLS</div><h1>Research, <em>in one place.</em></h1><p>Explore the updated combined TradingView research draft and older Pro V1 source files.</p></div><div className="feature-head-badge"><TerminalSquare size={17} /><div><strong>PRO V1</strong><small>Research drafts</small></div></div></div>
-      <div className="feature-notice warning"><ShieldAlert size={18} /><p><strong>Research only; not platform verified.</strong> The MT5 EA is restricted to Strategy Tester and requires a hedging account mode and two explicit opt-ins. It cannot run on live or demo accounts. No MT5 bridge is included and the website signal endpoint remains HOLD.</p></div>
-      <div className="ea-layout"><div className="ea-main"><DownloadCenter />
-      <section className="feature-card ea-steps"><div className="feature-section-label">02 / GETTING STARTED</div><div className="feature-card-heading"><div><h2>Prepare a test<span>.</span></h2><p>Use a standard M1 chart and review the limitations.</p></div></div><div className="ea-step"><span>01</span><div><strong>Choose your research draft</strong><p>For the updated BT + FTB interpretation, choose the combined TradingView indicator. Older Pro V1 sources use different rules.</p></div><FileCode2 size={17} /></div><div className="ea-step"><span>02</span><div><strong>Compile locally</strong><p>Paste Pine into TradingView or compile the MQL5 files in MetaEditor. Resolve errors before testing.</p></div><Code2 size={17} /></div><div className="ea-step"><span>03</span><div><strong>Use Strategy Tester</strong><p>For MT5 use hedging mode and review both disabled order gates. Compare a short visual run against your charts.</p></div><Laptop size={17} /></div><Link className="feature-guide-link" href="/ea/guide">OPEN THE FULL INSTALL GUIDE <ArrowRight size={15} /></Link></section></div>
-      <aside className="ea-aside"><section className="feature-card ea-status-card"><span className="ea-status-icon"><Workflow size={19} /></span><div className="feature-section-label">CURRENT STATE</div><h2>Research mode<span>.</span></h2><p>The browser chart and tester are independent tools, not a live trading or signal service.</p><div className="ea-status-row"><span>Signal endpoint</span><strong>HOLD ONLY</strong></div><div className="ea-status-row"><span>MT5 connection</span><strong>DISCONNECTED</strong></div><div className="ea-status-row"><span>Tester orders</span><strong>OFF BY DEFAULT</strong></div></section><section className="ea-aside-tip"><BookOpen size={19} /><h3>Take your time.</h3><p>Review candidates manually. No platform compilation, matching historical signals or performance has been verified.</p><Link href="/ea/guide">READ THE GUIDE <ArrowRight size={14} /></Link></section></aside></div>
-      <div className="ea-caution"><Check size={15} /> Virtual positions, native strategy fills and MT5 tester results are different models. Compare data and events before interpreting results.</div><footer className="feature-footer"><span>✳ &nbsp; TRADING BRAIN / YOUR SYSTEM. YOUR EDGE.</span><span>NOT FINANCIAL ADVICE</span></footer>
-    </main></div>;
+  return <div className="feature-page">
+    <header className="feature-topbar">
+      <Link href="/dashboard" className="feature-back"><ArrowLeft size={15} /> BACK TO DASHBOARD</Link>
+      <span>TRADING BRAIN <i>/</i> EA CENTER</span>
+      <Link href="/chart">OPEN CHART <ArrowRight size={13} /></Link>
+    </header>
+    <main className="feature-content">
+      <div className="feature-heading">
+        <div><div className="feature-eyebrow"><span /> THE TRADING BRAIN / DOWNLOADS</div><h1>EA <em>Center.</em></h1><p>Your place for EA and script downloads.</p></div>
+        <div className="feature-head-badge"><FileCode2 size={17} /><div><strong>EA CENTER</strong><small>Downloads</small></div></div>
+      </div>
+      <DownloadCenter />
+      <footer className="feature-footer"><span>✳ &nbsp; TRADING BRAIN / YOUR SYSTEM. YOUR EDGE.</span><span>NOT FINANCIAL ADVICE</span></footer>
+    </main>
+  </div>;
 }
