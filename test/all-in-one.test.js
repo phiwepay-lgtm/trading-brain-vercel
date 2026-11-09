@@ -32,7 +32,7 @@ test('All In One Pine combines every TradingView study into one indicator', () =
   // Fixed Range Volume Profile (dedicated UTC+2 window)
   for (const text of [
     'Fixed Range VP', 'showFRVP', 'frvpNQOpen', 'frvpPreHours', 'frvpEndHour',
-    'FTZ = "UTC+2"', 'fStart = timestamp', 'position.bottom_left',
+    'FTZ = "UTC+2"', 'prevDay = lastTod < endTotal', 'hour(time[i], FTZ)', 'position.bottom_left',
   ]) assert.ok(all.includes(text), `Missing FRVP: ${text}`);
 });
 
