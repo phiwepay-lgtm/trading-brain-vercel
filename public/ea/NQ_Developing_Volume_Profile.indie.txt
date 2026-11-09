@@ -1,0 +1,150 @@
+# indie:lang_version = 5
+# Draft; not compiled in the user's editor. Requires Indie v5 schedule, typed
+# lists, rectangle, line and label APIs; some editor versions may lack them.
+# Chart-bar approximation, NOT TradingView SVP HD or trade-at-price data.
+# Latest 16:00-to-16:00 America/New_York period only, including live bar.
+# Use standard 1m-1h candles; bars are grouped by open time. Up/down is candle
+# direction, not buyer/seller volume. No auto zoom detail or historical profiles.
+from datetime import time
+from math import isnan, floor
+from indie import indicator, param, MainContext, color
+from indie.schedule import ScheduleRule, Schedule, ALL_DAYS
+from indie.drawings import Rectangle, LineSegment, AbsolutePosition, LabelRel, relative_position
+
+@indicator('Blackwatch - NQ Developing Volume Profile (draft)', overlay_main_pane=True)
+@param.int('rows', default=40, min=10, max=100, title='Price rows')
+@param.int('max_bars', default=1500, min=10, max=1800, title='Maximum bars to scan')
+@param.float('area_percent', default=70.0, min=1.0, max=100.0, title='Value area %')
+@param.str('mode', default='Total', options=['Total', 'Up/Down', 'Delta'], title='Volume display')
+@param.float('width_percent', default=30.0, min=5.0, max=100.0, title='Profile width % of observed time span')
+class Main(MainContext):
+    def __init__(self):
+        rule = ScheduleRule(start=time(hour=16), end=time(hour=16), days=ALL_DAYS)
+        self._window = Schedule(rules=[rule], timezone='America/New_York')
+
+    def calc(self, rows, max_bars, area_percent, mode, width_percent):
+        if not self.is_last_bar:
+            return
+        # Only this indicator's drawings are cleared and rebuilt at last bar.
+        self.chart.clean()
+        available = min(max_bars, self.bar_index + 1)
+        count = 0
+        hi = self.high[0]
+        lo = self.low[0]
+        missing = False
+        for i in range(available):
+            if not self._window.is_same_period(self.time[0], self.time[i]):
+                break
+            count += 1
+            hi = max(hi, self.high[i])
+            lo = min(lo, self.low[i])
+            if isnan(self.volume[i]):
+                missing = True
+        truncated = False
+        if count == max_bars and self.bar_index + 1 > max_bars:
+            truncated = self._window.is_same_period(self.time[0], self.time[max_bars])
+        status = 'NQ profile: ' + str(count) + ' bars | 16:00 NY to now'
+        if truncated:
+            status += ' | SCAN LIMIT'
+        if missing:
+            status += ' | MISSING VOLUME'
+        if count == self.bar_index + 1:
+            status += ' | HISTORY START'
+        if count < 2 or hi <= lo:
+            self.chart.draw(LabelRel('Not enough range / history to build profile', relative_position.TOP_RIGHT))
+            return
+        step = (hi - lo) / rows
+        ups: list[float] = []
+        downs: list[float] = []
+        for j in range(rows):
+            ups.append(0.0)
+            downs.append(0.0)
+        total = 0.0
+        for i in range(count):
+            v = 0.0 if isnan(self.volume[i]) else self.volume[i]
+            if v > 0.0:
+                candle_range = self.high[i] - self.low[i]
+                up = self.close[i] >= self.open[i]
+                if candle_range <= 0.0:
+                    idx = min(rows - 1, max(0, int(floor((self.close[i] - lo) / step))))
+                    if up:
+                        ups[idx] += v
+                    else:
+                        downs[idx] += v
+                else:
+                    first = min(rows - 1, max(0, int(floor((self.low[i] - lo) / step))))
+                    last = min(rows - 1, max(0, int(floor((self.high[i] - lo) / step))))
+                    for j in range(first, last + 1):
+                        overlap = max(0.0, min(self.high[i], lo + (j + 1) * step) - max(self.low[i], lo + j * step))
+                        portion = v * overlap / candle_range
+                        if up:
+                            ups[j] += portion
+                        else:
+                            downs[j] += portion
+                total += v
+        if total <= 0.0:
+            self.chart.draw(LabelRel('No positive volume in range', relative_position.TOP_RIGHT))
+            return
+        poc = 0
+        max_total = -1.0
+        max_display = 0.0
+        for j in range(rows):
+            row_total = ups[j] + downs[j]
+            if row_total > max_total:
+                max_total = row_total
+                poc = j
+            shown = abs(ups[j] - downs[j]) if mode == 'Delta' else row_total
+            max_display = max(max_display, shown)
+        val = poc
+        vah = poc
+        included = max_total
+        target = total * area_percent / 100.0
+        for iteration in range(rows):
+            if included >= target or (val == 0 and vah == rows - 1):
+                break
+            below = ups[val - 1] + downs[val - 1] if val > 0 else -1.0
+            above = ups[vah + 1] + downs[vah + 1] if vah < rows - 1 else -1.0
+            choose_above = above > below or (above == below and vah + 1 - poc <= poc - (val - 1))
+            candidate = above if choose_above else below
+            if candidate < 0.0 or included + candidate > target:
+                break
+            included += candidate
+            if choose_above:
+                vah += 1
+            else:
+                val -= 1
+        left = self.time[count - 1]
+        right = self.time[0]
+        max_width = (right - left) * width_percent / 100.0
+        if max_display > 0.0:
+            for j in range(rows):
+                u = ups[j]
+                d = downs[j]
+                shown = abs(u - d) if mode == 'Delta' else u + d
+                if shown > 0.0:
+                    width = max_width * shown / max_display
+                    bottom = lo + step * j
+                    top = lo + step * (j + 1)
+                    in_area = j >= val and j <= vah
+                    alpha = 0.75 if in_area else 0.35
+                    if mode == 'Up/Down':
+                        up_width = width * u / (u + d)
+                        if up_width > 0.0:
+                            self.chart.draw(Rectangle(AbsolutePosition(left, top), AbsolutePosition(left + up_width, bottom), line_color=color.TRANSPARENT, bg_color=color.TEAL(alpha)))
+                        if width > up_width:
+                            self.chart.draw(Rectangle(AbsolutePosition(left + up_width, top), AbsolutePosition(left + width, bottom), line_color=color.TRANSPARENT, bg_color=color.RED(alpha)))
+                    else:
+                        fill = color.BLUE(alpha)
+                        if mode == 'Delta':
+                            fill = color.TEAL(alpha) if u >= d else color.RED(alpha)
+                        elif not in_area:
+                            fill = color.GRAY(alpha)
+                        self.chart.draw(Rectangle(AbsolutePosition(left, top), AbsolutePosition(left + width, bottom), line_color=color.TRANSPARENT, bg_color=fill))
+        poc_price = lo + (poc + 0.5) * step
+        vah_price = lo + (vah + 1) * step
+        val_price = lo + val * step
+        self.chart.draw(LineSegment(AbsolutePosition(left, poc_price), AbsolutePosition(right, poc_price), color=color.YELLOW, line_width=2))
+        self.chart.draw(LineSegment(AbsolutePosition(left, vah_price), AbsolutePosition(right, vah_price), color=color.AQUA))
+        self.chart.draw(LineSegment(AbsolutePosition(left, val_price), AbsolutePosition(right, val_price), color=color.AQUA))
+        self.chart.draw(LabelRel(status + ' | chart-bar estimate', relative_position.TOP_RIGHT))
+        return

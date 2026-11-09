@@ -58,6 +58,7 @@ export default function DownloadCenter() {
     <section className="card next-study"><p className="eyebrow">ONE SCRIPT / TWO STUDIES</p><h2>Dark Orders + Anchor</h2><p>TradingView and Indie draft downloads. The two calculations remain separate.</p><Link className="button secondary" href="/two-in-one">Open two-in-one</Link></section>
     <section className="card next-study"><p className="eyebrow">SEPARATE TRADINGVIEW / INDIE STUDY</p><h2>My Session Range</h2><p>Highlight your chosen session’s high and low. Separate from Dark Orders and the anchor.</p><Link className="button secondary" href="/session-range">Open My Session Range</Link></section>
     <section className="card next-study"><p className="eyebrow">SEPARATE MT5 STRATEGY TESTER DRAFT</p><h2>Supertrend HA EA</h2><p>Partial M1 Heikin Ashi research EA, dashboard and template-save helper. Tester only; not a full Pine port.</p><Link className="button secondary" href="/supertrend-tester">Open Supertrend tester</Link></section>
+    <section className="card next-study"><p className="eyebrow">TRADINGVIEW / INDIE DRAFT</p><h2>NQ Volume Profile</h2><p>A developing chart-volume approximation from 4:00 p.m. New York time, two hours before the futures open.</p><Link className="button secondary" href="/nq-volume-profile">Open NQ Volume Profile</Link></section>
     <footer>TRADING BRAIN / DARK ORDERS <span>NOT FINANCIAL ADVICE</span></footer>
   </main>;
 }

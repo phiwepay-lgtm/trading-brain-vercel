@@ -36,7 +36,7 @@ test('Dark Orders Pure Price uses the supplied price and Heikin Ashi filters wit
 
 test('the public downloads contain only the requested standalone and combined scripts', () => {
   const { readdirSync } = require('node:fs');
-  assert.deepEqual(readdirSync('public/ea').sort(), ['Blackwatch_My_Session_Range.indie.txt', 'Blackwatch_My_Session_Range.pine', 'Dark_Orders_Pure_Price.pine', 'Dark_Orders_Trend_Predictor.indie.txt', 'Dark_Orders_Trend_Predictor.pine', 'Supertrend_HA_Tester_Research.zip', 'Trend_Predictor.pine']);
+  assert.deepEqual(readdirSync('public/ea').sort(), ['Blackwatch_My_Session_Range.indie.txt', 'Blackwatch_My_Session_Range.pine', 'Dark_Orders_Pure_Price.pine', 'Dark_Orders_Trend_Predictor.indie.txt', 'Dark_Orders_Trend_Predictor.pine', 'NQ_Developing_Volume_Profile.indie.txt', 'NQ_Developing_Volume_Profile.pine', 'Supertrend_HA_Tester_Research.zip', 'Trend_Predictor.pine']);
   for (const removed of ['app/dashboard/page.tsx', 'app/chart/page.tsx', 'app/ea/results/page.tsx', 'app/api/brain/route.ts', 'mt5/AlgoV1/README.txt']) {
     assert.equal(existsSync(removed), false, `${removed} should be removed`);
   }
