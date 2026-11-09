@@ -332,3 +332,155 @@ if showNQ and barstate.islast
                 table.cell(status, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
         else
             table.cell(status, 0, 0, "Not enough price range to build profile", text_color=color.white, bgcolor=color.red)
+
+// ============================ 5. VVWAP (daily reset) ============================
+// Volume-Weighted Average Price that resets at the start of each day.
+gW = "VVWAP"
+showVVWAP = input.bool(true, "Show VVWAP (daily)", group=gW, tooltip="Volume-Weighted Average Price resetting at the start of each day. Hidden when the instrument has no usable volume.")
+var float _cumPV = 0.0
+var float _cumV = 0.0
+bool newDay = barstate.isfirst or dayofmonth(time) != dayofmonth(time[1])
+if newDay
+    _cumPV := 0.0
+    _cumV := 0.0
+_cumPV := _cumPV + hlc3 * volume
+_cumV := _cumV + volume
+float vvwap = _cumV > 0 ? _cumPV / _cumV : na
+plot(showVVWAP ? vvwap : na, "VVWAP (daily)", color=color.yellow, linewidth=2)
+
+// ====================== 6. FIXED RANGE VOLUME PROFILE (session-attached) ======================
+// A fixed-range Volume Profile for a dedicated UTC+2 window (default 11:00–19:00), similar to
+// TradingView's "Fix Range" VP. Independent chart-bar approximation: uniform volume over each
+// candle range; directional volume is candle direction, NOT aggressor buy/sell. The developing
+// 16:00 NY profile above is kept as a separate study.
+gF = "Fixed Range VP"
+showFRVP = input.bool(true, "Show fixed-range VP (11–19 UTC+2)", group=gF, tooltip="Fixed-range volume profile for the dedicated UTC+2 window. Default start is 2 hours before the 13:00 UTC+2 NQ open; default end is 19:00 UTC+2.")
+frvpNQOpen = input.int(13, "NQ open hour (UTC+2)", minval=0, maxval=23, group=gF)
+frvpPreHours = input.int(2, "Hours before NQ open", minval=0, maxval=12, group=gF)
+frvpEndHour = input.int(19, "Window end hour (UTC+2)", minval=0, maxval=23, group=gF)
+const string FTZ = "UTC+2"
+
+var array<box> frBoxes = array.new<box>()
+var array<line> frLines = array.new<line>()
+var array<int> frIdx = array.new_int(0)
+var table frStatus = table.new(position.bottom_left, 1, 1)
+if showFRVP and barstate.islast
+    array.clear(frIdx)
+    while array.size(frBoxes) > 0
+        box.delete(array.pop(frBoxes))
+    while array.size(frLines) > 0
+        line.delete(array.pop(frLines))
+    if not timeframe.isintraday or timeframe.in_seconds() < 60 or timeframe.in_seconds() > 3600
+        table.cell(frStatus, 0, 0, "Use standard intraday candles, 1m–1h", text_color=color.white, bgcolor=color.red)
+    else
+        int y = year(time, FTZ)
+        int m = month(time, FTZ)
+        int d = dayofmonth(time, FTZ)
+        int fStart = timestamp(FTZ, y, m, d, math.max(0, frvpNQOpen - frvpPreHours), 0)
+        int fEnd = timestamp(FTZ, y, m, d, frvpEndHour, 0)
+        int found = 0
+        float hi = na
+        float lo = na
+        bool missingVolume = false
+        int available = math.min(maxBars, bar_index + 1)
+        for i = 0 to available - 1
+            int t = time[i]
+            if t <= fEnd and t >= fStart
+                array.push(frIdx, i)
+                found += 1
+                hi := na(hi) ? high[i] : math.max(hi, high[i])
+                lo := na(lo) ? low[i] : math.min(lo, low[i])
+                missingVolume := missingVolume or na(volume[i])
+            else if t < fStart
+                break
+        bool truncated = available == maxBars and bar_index + 1 > maxBars and time[available - 1] >= fStart
+        bool historyStart = found == bar_index + 1
+        float span = hi - lo
+        array<float> ups = array.new_float(rows, 0.0)
+        array<float> downs = array.new_float(rows, 0.0)
+        float total = 0.0
+        if found > 0 and span > 0
+            float step = span / rows
+            for k = 0 to array.size(frIdx) - 1
+                int i = array.get(frIdx, k)
+                float v = nz(volume[i], 0)
+                if v > 0
+                    float candleSpan = high[i] - low[i]
+                    bool up = close[i] >= open[i]
+                    if candleSpan <= 0
+                        int b = math.max(0, math.min(rows - 1, int(math.floor((close[i] - lo) / step))))
+                        if up
+                            array.set(ups, b, array.get(ups, b) + v)
+                        else
+                            array.set(downs, b, array.get(downs, b) + v)
+                    else
+                        int first = math.max(0, math.min(rows - 1, int(math.floor((low[i] - lo) / step))))
+                        int last = math.max(0, math.min(rows - 1, int(math.floor((high[i] - lo) / step))))
+                        for j = first to last
+                            float overlap = math.max(0.0, math.min(high[i], lo + (j + 1) * step) - math.max(low[i], lo + j * step))
+                            float portion = v * overlap / candleSpan
+                            if up
+                                array.set(ups, j, array.get(ups, j) + portion)
+                            else
+                                array.set(downs, j, array.get(downs, j) + portion)
+                    total += v
+            if total > 0
+                int poc = 0
+                float maxTotal = -1.0
+                float maxDisplay = 0.0
+                for j = 0 to rows - 1
+                    float u = array.get(ups, j)
+                    float dd = array.get(downs, j)
+                    float rowTotal = u + dd
+                    if rowTotal > maxTotal
+                        maxTotal := rowTotal
+                        poc := j
+                    maxDisplay := math.max(maxDisplay, mode == "Delta" ? math.abs(u - dd) : rowTotal)
+                int val = poc
+                int vah = poc
+                float included = maxTotal
+                float target = total * areaPercent / 100.0
+                for iteration = 0 to rows - 1
+                    if included >= target or (val == 0 and vah == rows - 1)
+                        break
+                    float below = val > 0 ? array.get(ups, val - 1) + array.get(downs, val - 1) : -1.0
+                    float above = vah < rows - 1 ? array.get(ups, vah + 1) + array.get(downs, vah + 1) : -1.0
+                    bool chooseAbove = above > below or (above == below and vah + 1 - poc <= poc - (val - 1))
+                    float candidate = chooseAbove ? above : below
+                    if candidate < 0 or included + candidate > target
+                        break
+                    included += candidate
+                    if chooseAbove
+                        vah += 1
+                    else
+                        val -= 1
+                int startBar = bar_index - array.get(frIdx, 0)
+                int endBar = bar_index - array.get(frIdx, array.size(frIdx) - 1)
+                int maxWidth = math.max(1, math.min(400, int(math.round(math.max(1, array.size(frIdx) - 1) * widthPct / 100))))
+                for j = 0 to rows - 1
+                    float u = array.get(ups, j)
+                    float dd = array.get(downs, j)
+                    float displayVol = mode == "Delta" ? math.abs(u - dd) : u + dd
+                    if displayVol > 0 and maxDisplay > 0
+                        int width = math.max(1, int(math.round(maxWidth * displayVol / maxDisplay)))
+                        float bottom = lo + step * j
+                        float top = lo + step * (j + 1)
+                        bool inVA = j >= val and j <= vah
+                        color base = inVA ? color.new(color.blue, 30) : color.new(color.gray, 55)
+                        if mode == "Up/Down"
+                            int upWidth = int(math.round(width * u / (u + dd)))
+                            if upWidth > 0
+                                array.push(frBoxes, box.new(startBar, top, startBar + upWidth, bottom, border_color=na, bgcolor=inVA ? color.new(color.teal, 25) : color.new(color.teal, 65)))
+                            if width > upWidth
+                                array.push(frBoxes, box.new(startBar + upWidth, top, startBar + width, bottom, border_color=na, bgcolor=inVA ? color.new(color.red, 25) : color.new(color.red, 65)))
+                        else
+                            color c = mode == "Delta" ? (u >= dd ? color.new(color.teal, inVA ? 25 : 65) : color.new(color.red, inVA ? 25 : 65)) : base
+                            array.push(frBoxes, box.new(startBar, top, startBar + width, bottom, border_color=na, bgcolor=c))
+                array.push(frLines, line.new(startBar, lo + (poc + 0.5) * step, endBar, lo + (poc + 0.5) * step, color=color.yellow, width=2))
+                array.push(frLines, line.new(startBar, lo + (vah + 1) * step, endBar, lo + (vah + 1) * step, color=color.aqua))
+                array.push(frLines, line.new(startBar, lo + val * step, endBar, lo + val * step, color=color.aqua))
+                table.cell(frStatus, 0, 0, "Fixed VP • " + str.tostring(found) + " bars" + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n" + str.tostring(frvpNQOpen - frvpPreHours) + ":00–" + str.tostring(frvpEndHour) + ":00 " + FTZ + " • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
+            else
+                table.cell(frStatus, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
+        else
+            table.cell(frStatus, 0, 0, "Not enough price range to build profile", text_color=color.white, bgcolor=color.red)
