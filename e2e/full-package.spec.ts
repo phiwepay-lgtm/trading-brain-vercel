@@ -7,7 +7,7 @@ const files = [
   {name:'MT5 Indicator', file:'TradingBrain_Pro_V1_Indicator.mq5'},
   {name:'MT5 Tester Algo', file:'TradingBrain_Pro_V1_Tester.mq5'},
 ];
-test('Download Center offers only four clearly unverified Pro V1 sources',async({page,request})=>{
+test('Download Center preserves four clearly unverified older Pro V1 sources',async({page,request})=>{
   await page.goto('/ea');
   await expect(page.getByText('PRO V1 · DRAFT')).toBeVisible();
   await expect(page.getByText(/have not been compiled or tested in TradingView or MT5/)).toBeVisible();
@@ -67,4 +67,16 @@ test('wrong source is rejected and clipboard failure keeps manual-copy fallback'
   await page.getByRole('button',{name:'Copy TradingView Strategy code'}).click();
   await expect(page.getByText(/Clipboard access was blocked/)).toBeVisible();
   await expect(page.getByLabel('TradingView Strategy Pine code')).toHaveValue(/^\/\/@version=5/);
+});
+
+test('updated combined edge source is separated from superseded Pro V1 drafts',async({page})=>{
+  await page.goto('/ea');
+  await expect(page.getByText(/older Pro V1 downloads and browser tester still use the superseded FTB fib bypass/)).toBeVisible();
+  await page.getByRole('button',{name:'Show Confirmed Edge Research Indicator code'}).click();
+  const code=page.getByLabel('Confirmed Edge Research Indicator Pine code');
+  await expect(code).toHaveValue(/^\/\/@version=5\r?\nindicator\(/);
+  expect(await code.inputValue()).toContain('"FTB only"');
+  const pending=page.waitForEvent('download');
+  await page.getByRole('link',{name:'Download Confirmed Edge Research Indicator'}).click();
+  expect((await pending).suggestedFilename()).toBe('TradingBrain_Confirmed_Edge_Research.pine');
 });
