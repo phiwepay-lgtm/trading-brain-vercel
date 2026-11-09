@@ -57,3 +57,29 @@ test('explicit provider pagination continues beyond 100 pages without a silent c
   await page.goto('/tester');await page.getByLabel('Provider').selectOption('demo');await page.getByLabel('Start date (UTC)').fill('2023-11-15');await page.getByLabel('End date inclusive (UTC)').fill('2023-12-24');await page.getByRole('button',{name:'Fetch provider history'}).click();
   await expect(page.getByText('LONG SYNTHETIC DEMO · DEMO')).toBeVisible({timeout:70000});expect(calls).toBeGreaterThan(100);await expect(page.getByText('56,000 M1 candles')).toBeVisible();
 });
+
+test('optional volume confluence compares existing results and exports its limitations',async({page})=>{
+  const data=fixture();
+  const csv='time,open,high,low,close,volume\n'+data.map((b,i)=>`${b.time},${b.open},${b.high},${b.low},${b.close},${100+(i%11)*10}`).join('\n');
+  await page.goto('/tester');
+  await page.getByLabel('M1 history file').setInputFiles({name:'synthetic-volume.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
+  await page.getByRole('button',{name:'Load local history'}).click();
+  await expect(page.getByText('20,000 M1 candles')).toBeVisible({timeout:30000});
+  await page.getByLabel('Compare Dark Orders volume patterns').check();
+  await page.getByRole('button',{name:'Run strategy test'}).click();
+  await expect(page.getByText('Research test complete.')).toBeVisible({timeout:30000});
+  await expect(page.getByRole('heading',{name:'Dark Orders comparison'})).toBeVisible();
+  await expect(page.getByText(/not a filtered rerun/).first()).toBeVisible();
+  const reportPending=page.waitForEvent('download');await page.getByRole('button',{name:'Export report JSON'}).click();
+  const report=JSON.parse(await readFile((await (await reportPending).path())!,'utf8'));
+  expect(report.darkOrdersComparison.allClosed.closed).toBe(report.summary.closed);
+  expect(report.darkOrdersProComparison.allClosed.closed).toBeGreaterThan(0);
+  expect(report.darkOrdersProComparison.available.closed+report.darkOrdersProComparison.unknown.closed).toBe(report.darkOrdersProComparison.allClosed.closed);
+  expect(report.darkOrdersProComparison.matched.closed+report.darkOrdersProComparison.unmatched.closed).toBe(report.darkOrdersProComparison.available.closed);
+  expect(report.darkOrdersComparison.available.closed+report.darkOrdersComparison.unknown.closed).toBe(report.summary.closed);
+  expect(report.darkOrdersComparison.matched.closed+report.darkOrdersComparison.unmatched.closed).toBe(report.darkOrdersComparison.available.closed);
+  const htmlPending=page.waitForEvent('download');await page.getByRole('button',{name:'Download full report'}).click();
+  expect(await readFile((await (await htmlPending).path())!,'utf8')).toContain('Dark Orders confluence comparison');
+  await page.getByLabel('Compare Dark Orders volume patterns').uncheck();
+  await expect(page.getByRole('heading',{name:'Dark Orders comparison'})).toHaveCount(0);
+});
