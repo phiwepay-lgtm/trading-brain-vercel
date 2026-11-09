@@ -1,7 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {readFileSync}=require('node:fs');
-const s=readFileSync('public/ea/TradingBrain_Confirmed_Edge_Research.pine','utf8');
+const s=readFileSync('reference/retired-ea/TradingBrain_Confirmed_Edge_Research.pine','utf8');
 
 test('combined research indicator keeps both paths and the fib, CHoCH, engulf sequence',()=>{
   assert.match(s,/^\/\/@version=5\r?\nindicator\(/);
