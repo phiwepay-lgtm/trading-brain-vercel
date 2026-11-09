@@ -57,6 +57,7 @@ export default function DownloadCenter() {
     <section className="card next-study"><p className="eyebrow">SEPARATE TRADINGVIEW STUDY</p><h2>Trend Predictor</h2><p>A closed-candle VWAP and volume-weighted EMA anchor for confluence with your own edge. No BUY or SELL signals; separate from Dark Orders.</p><Link className="button secondary" href="/trend-predictor">Open Trend Predictor</Link></section>
     <section className="card next-study"><p className="eyebrow">ONE SCRIPT / TWO STUDIES</p><h2>Dark Orders + Anchor</h2><p>TradingView and Indie draft downloads. The two calculations remain separate.</p><Link className="button secondary" href="/two-in-one">Open two-in-one</Link></section>
     <section className="card next-study"><p className="eyebrow">SEPARATE TRADINGVIEW / INDIE STUDY</p><h2>My Session Range</h2><p>Highlight your chosen session’s high and low. Separate from Dark Orders and the anchor.</p><Link className="button secondary" href="/session-range">Open My Session Range</Link></section>
+    <section className="card next-study"><p className="eyebrow">SEPARATE MT5 STRATEGY TESTER DRAFT</p><h2>Supertrend HA EA</h2><p>Partial M1 Heikin Ashi research EA, dashboard and template-save helper. Tester only; not a full Pine port.</p><Link className="button secondary" href="/supertrend-tester">Open Supertrend tester</Link></section>
     <footer>TRADING BRAIN / DARK ORDERS <span>NOT FINANCIAL ADVICE</span></footer>
   </main>;
 }

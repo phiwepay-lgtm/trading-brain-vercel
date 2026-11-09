@@ -67,3 +67,12 @@ test('session range offers separate Pine and Indie files', async ({ page, reques
     expect(await response.text()).toBe(await readFile(`public/ea/${name}`, 'utf8'));
   }
 });
+
+test('Supertrend tester package is separate and discloses restrictions', async ({ page, request }) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Open Supertrend tester' }).click();
+  await expect(page.getByRole('heading', { name: 'Supertrend EA.' })).toBeVisible();
+  await expect(page.getByText('Not a complete port.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Download MT5 research package' })).toHaveAttribute('href', '/ea/Supertrend_HA_Tester_Research.zip');
+  expect((await request.get('/ea/Supertrend_HA_Tester_Research.zip')).status()).toBe(200);
+});
