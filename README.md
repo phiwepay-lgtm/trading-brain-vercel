@@ -121,7 +121,7 @@ This runs a local test-only mocked OpenAI response. Browser tests mock the provi
 
 ## EA Center
 
-`/ea` currently has no downloadable tools. The former research drafts are archived in `reference/retired-ea` and are not served as downloads. The `/api/signal` endpoint remains HOLD-only; the website does not connect to MT5.
+`/ea` offers the user-supplied **Dark Orders Pure Price + History [Blackwatch]** TradingView Pine v5 overlay. It does not use volume: both candle range and body must meet configurable multiplier and fixed Z-score thresholds against their rolling averages. Directional signals also require an expanding Heikin Ashi body on the chart timeframe. These price patterns do not establish institutional activity or detect a 0.382 level. GC and XAUUSD signals may differ by feed, session and history; no lead relationship has been verified. Open-bar conditions can change before close. The optional table shows the latest confirmed directional signals, including bar-open time in the exchange timezone and bar close, while its totals count directional signals over all loaded bars (not daily or weekly totals). Orange-only bars are not listed or counted. Historical colors and counts depend on loaded data and settings; the table does not track trade outcomes. The script has not been compiled or verified in TradingView. The former research drafts are archived in `reference/retired-ea` and are not served as downloads. The `/api/signal` endpoint remains HOLD-only; the website does not connect to MT5.
 
 ### Historical scanner and package notes
 
