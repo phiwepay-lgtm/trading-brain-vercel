@@ -1,7 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {readFileSync}=require('node:fs');
-const root='public/ea/TradingBrain_Pro_V1_';
+const root='reference/legacy-ea/superseded-pro-v1/TradingBrain_Pro_V1_';
 
 test('TradingView sources have Pine declarations and cannot be mistaken for MT5 sources',()=>{
   for (const [file,declaration] of [['Indicator.pine','indicator'],['Strategy.pine','strategy']]) {

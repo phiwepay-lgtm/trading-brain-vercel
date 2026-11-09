@@ -2,7 +2,7 @@
 
 > Superseded rule: the user subsequently clarified that FTB, like BT, requires a 0.382 touch. The four Pro V1 files and browser tester below have not been updated and must not be presented as the corrected edge. The separate `TradingBrain_Confirmed_Edge_Research.pine` is an uncompiled visual research draft of the newer interpretation; its assumptions and limits are documented in `confirmed-edge-research.md`.
 
-Pro V1 consists of four separately downloadable source drafts: TradingView indicator and strategy, and MT5 indicator and tester-only EA. They have **not** been compiled or run on their target platforms. Their detection is still a mechanical interpretation, not a verified implementation of the user's discretionary edge. No real-history backtest, platform parity, fill quality or profitability is established. No live or demo-account order execution is authorized.
+The archived Pro V1 consisted of four source drafts: TradingView indicator and strategy, and MT5 indicator and tester-only EA. They have **not** been compiled or run on their target platforms. Their detection is still a mechanical interpretation, not a verified implementation of the user's discretionary edge. No real-history backtest, platform parity, fill quality or profitability is established. No live or demo-account order execution is authorized.
 
 ## Inputs used and user decisions
 

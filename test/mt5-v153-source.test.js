@@ -67,5 +67,6 @@ test('all presets match the draft inputs and are inert until deliberately enable
 test('Download Center no longer exposes the archived tester kit', () => {
   const page = fs.readFileSync(path.join(root, 'app/ea/download-center.tsx'), 'utf8');
   assert.doesNotMatch(page, /TradingBrain-MT5-v153-Tester\.zip/);
-  assert.match(page, /TradingBrain_Pro_V1_Tester\.mq5/);
+  assert.doesNotMatch(page, /TradingBrain_Pro_V1_Tester\.mq5/);
+  assert.match(page, /No downloads available/);
 });

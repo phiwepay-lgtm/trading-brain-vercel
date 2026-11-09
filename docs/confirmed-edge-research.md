@@ -1,6 +1,6 @@
 # Confirmed-edge research indicator
 
-`public/ea/TradingBrain_Confirmed_Edge_Research.pine` is a **visual-only, uncompiled TradingView research draft**, separate from the four older Pro V1 downloads. It combines selectable BT and FTB modes and requires a 0.382 reaction for both. It does not submit orders or simulate trade results. The older Pro V1 files, browser chart, tester, and Dark Orders comparisons still use the former FTB bypass and do not represent this correction. Nothing here establishes journal fidelity, native platform compilation, profitable results, or a particular number of trades.
+`reference/legacy-ea/superseded-pro-v1/TradingBrain_Confirmed_Edge_Research.pine` (archived, no longer a public download) is a **visual-only, uncompiled TradingView research draft**, archived alongside the four older Pro V1 sources. It combines selectable BT and FTB modes and requires a 0.382 reaction for both. It does not submit orders or simulate trade results. The older Pro V1 files, browser chart, tester, and Dark Orders comparisons still use the former FTB bypass and do not represent this correction. Nothing here establishes journal fidelity, native platform compilation, profitable results, or a particular number of trades.
 
 ## User-confirmed rules
 
