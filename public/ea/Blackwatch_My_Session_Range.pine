@@ -1,0 +1,85 @@
+//@version=6
+// Based on the user-supplied Blackwatch Advisory - My Session Range, itself a
+// modification of RobMinty's FXN - Asian Session Range. This version replaces
+// the source's hard-coded broker offset with an explicitly selected timezone.
+// It draws the latest observed session only; range can change until it ends.
+// Unverified in TradingView. Use intraday charts with session-aligned bars.
+indicator('Blackwatch Advisory - My Session Range', shorttitle='My Session', overlay=true, max_lines_count=4, max_boxes_count=1)
+
+showSession = input.bool(true, 'Show Session', group='My Session')
+sessionHours = input.session('0300-0700', 'Session time', group='My Session', tooltip='Default 03:00–07:00 in the selected timezone. Overnight sessions are supported.')
+sessionZone = input.string('UTC-5', 'Session timezone', group='My Session', tooltip='UTC-5 is fixed EST with no daylight saving. Use America/New_York to follow Eastern daylight saving time.')
+edgeColor = input.color(color.teal, 'Session Range Border Color', group='Session Box')
+edgeWidth = input.int(1, 'Session Box Line Width', minval=1, maxval=10, group='Session Box')
+edgeStyle = input.string('solid', 'Session Box Line Style', options=['solid', 'dashed', 'dotted'], group='Session Box')
+showHorizontal = input.bool(true, 'Turn on Horizontal lines', group='Session Box')
+showVertical = input.bool(true, 'Turn on Vertical lines', group='Session Box')
+fillColor = input.color(color.new(color.aqua, 90), 'Session Box Background Color', group='Session Box')
+
+lineStyle = edgeStyle == 'dashed' ? line.style_dashed : edgeStyle == 'dotted' ? line.style_dotted : line.style_solid
+startHour = int(str.tonumber(str.substring(sessionHours, 0, 2)))
+startMinute = int(str.tonumber(str.substring(sessionHours, 2, 4)))
+endHour = int(str.tonumber(str.substring(sessionHours, 5, 7)))
+endMinute = int(str.tonumber(str.substring(sessionHours, 7, 9)))
+startOfDay = startHour * 60 + startMinute
+endOfDay = endHour * 60 + endMinute
+crossesMidnight = endOfDay <= startOfDay
+validChart = timeframe.isintraday and timeframe.in_seconds() <= 3600
+inSession = validChart and not na(time(timeframe.period, sessionHours + ':1234567', sessionZone))
+
+// Derive boundaries using the session's local calendar, including overnight
+// sessions and timezone DST rules. Session bars are included by their open time.
+localMinutes = hour(time, sessionZone) * 60 + minute(time, sessionZone)
+startDay = dayofmonth(time, sessionZone) - (crossesMidnight and localMinutes < endOfDay ? 1 : 0)
+startTime = timestamp(sessionZone, year(time, sessionZone), month(time, sessionZone), startDay, startHour, startMinute)
+endTime = timestamp(sessionZone, year(time, sessionZone), month(time, sessionZone), startDay + (crossesMidnight ? 1 : 0), endHour, endMinute)
+
+var int trackedStart = na
+var float sessionHigh = na
+var float sessionLow = na
+var line topLine = na
+var line bottomLine = na
+var line leftLine = na
+var line rightLine = na
+var box background = na
+
+if inSession
+    isNewSession = na(trackedStart) or startTime != trackedStart
+    if isNewSession
+        trackedStart := startTime
+        sessionHigh := high
+        sessionLow := low
+    else
+        sessionHigh := math.max(sessionHigh, high)
+        sessionLow := math.min(sessionLow, low)
+
+    if showSession
+        if na(background)
+            background := box.new(trackedStart, sessionHigh, endTime, sessionLow, xloc=xloc.bar_time, border_color=na, bgcolor=fillColor)
+            topLine := line.new(trackedStart, sessionHigh, endTime, sessionHigh, xloc=xloc.bar_time)
+            bottomLine := line.new(trackedStart, sessionLow, endTime, sessionLow, xloc=xloc.bar_time)
+            leftLine := line.new(trackedStart, sessionHigh, trackedStart, sessionLow, xloc=xloc.bar_time)
+            rightLine := line.new(endTime, sessionHigh, endTime, sessionLow, xloc=xloc.bar_time)
+        box.set_lefttop(background, trackedStart, sessionHigh)
+        box.set_rightbottom(background, endTime, sessionLow)
+        box.set_bgcolor(background, fillColor)
+        line.set_xy1(topLine, trackedStart, sessionHigh)
+        line.set_xy2(topLine, endTime, sessionHigh)
+        line.set_xy1(bottomLine, trackedStart, sessionLow)
+        line.set_xy2(bottomLine, endTime, sessionLow)
+        line.set_xy1(leftLine, trackedStart, sessionHigh)
+        line.set_xy2(leftLine, trackedStart, sessionLow)
+        line.set_xy1(rightLine, endTime, sessionHigh)
+        line.set_xy2(rightLine, endTime, sessionLow)
+        line.set_color(topLine, showHorizontal ? edgeColor : na)
+        line.set_color(bottomLine, showHorizontal ? edgeColor : na)
+        line.set_color(leftLine, showVertical ? edgeColor : na)
+        line.set_color(rightLine, showVertical ? edgeColor : na)
+        line.set_style(topLine, lineStyle)
+        line.set_style(bottomLine, lineStyle)
+        line.set_style(leftLine, lineStyle)
+        line.set_style(rightLine, lineStyle)
+        line.set_width(topLine, edgeWidth)
+        line.set_width(bottomLine, edgeWidth)
+        line.set_width(leftLine, edgeWidth)
+        line.set_width(rightLine, edgeWidth)

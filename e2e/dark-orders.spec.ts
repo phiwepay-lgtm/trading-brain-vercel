@@ -28,3 +28,42 @@ test('page fits a narrow screen', async ({ page }) => {
   await page.goto('/');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('separate Trend Predictor can be previewed and downloaded', async ({ page, request }) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Open Trend Predictor' }).click();
+  await expect(page.getByRole('heading', { name: 'Trend Predictor.' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Download Trend Predictor' })).toHaveAttribute('href', '/ea/Trend_Predictor.pine');
+  await page.getByRole('button', { name: 'Show Trend Predictor code' }).click();
+  await expect(page.getByLabel('Trend Predictor Pine code')).toHaveValue(/^\/\/@version=6/);
+  const response = await request.get('/ea/Trend_Predictor.pine');
+  expect(await response.text()).toBe(await readFile('public/ea/Trend_Predictor.pine', 'utf8'));
+});
+
+test('two-in-one offers separate Pine and Indie sources', async ({ page, request }) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Open two-in-one' }).click();
+  await expect(page.getByRole('heading', { name: 'Two in one.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show TradingView Pine code' }).click();
+  await expect(page.getByLabel('TradingView Pine code')).toHaveValue(/^\/\/@version=6/);
+  await page.getByRole('button', { name: 'Show Indie draft code' }).click();
+  await expect(page.getByLabel('Indie draft code')).toHaveValue(/^# indie:lang_version = 5/);
+  for (const name of ['Dark_Orders_Trend_Predictor.pine', 'Dark_Orders_Trend_Predictor.indie.txt']) {
+    const response = await request.get(`/ea/${name}`);
+    expect(await response.text()).toBe(await readFile(`public/ea/${name}`, 'utf8'));
+  }
+});
+
+test('session range offers separate Pine and Indie files', async ({ page, request }) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Open My Session Range' }).click();
+  await expect(page.getByRole('heading', { name: 'My Session Range.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show TradingView Pine code' }).click();
+  await expect(page.getByLabel('TradingView Pine code')).toHaveValue(/^\/\/@version=6/);
+  await page.getByRole('button', { name: 'Show Indie draft code' }).click();
+  await expect(page.getByLabel('Indie draft code')).toHaveValue(/^# indie:lang_version = 5/);
+  for (const name of ['Blackwatch_My_Session_Range.pine', 'Blackwatch_My_Session_Range.indie.txt']) {
+    const response = await request.get(`/ea/${name}`);
+    expect(await response.text()).toBe(await readFile(`public/ea/${name}`, 'utf8'));
+  }
+});

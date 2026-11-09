@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 
 const sourcePath = '/ea/Dark_Orders_Pure_Price.pine';
 
@@ -53,6 +54,9 @@ export default function DownloadCenter() {
       </div>
       <aside><strong>Context, not a trading signal.</strong> Price expansion alone does not identify institutional or dark-pool orders, net buying or selling, or guarantee an entry. This script does not detect the 0.382 level. Heikin Ashi uses the chart timeframe; open-bar colors and conditions can change before close, so use once-per-bar-close alerts for confirmed bars. Historical colors and counts depend on loaded data and settings and are recalculated, not permanently saved. The table does not measure trade outcomes. This script has not been compiled or verified in TradingView.</aside>
     </section>
+    <section className="card next-study"><p className="eyebrow">SEPARATE TRADINGVIEW STUDY</p><h2>Trend Predictor</h2><p>A closed-candle VWAP and volume-weighted EMA anchor for confluence with your own edge. No BUY or SELL signals; separate from Dark Orders.</p><Link className="button secondary" href="/trend-predictor">Open Trend Predictor</Link></section>
+    <section className="card next-study"><p className="eyebrow">ONE SCRIPT / TWO STUDIES</p><h2>Dark Orders + Anchor</h2><p>TradingView and Indie draft downloads. The two calculations remain separate.</p><Link className="button secondary" href="/two-in-one">Open two-in-one</Link></section>
+    <section className="card next-study"><p className="eyebrow">SEPARATE TRADINGVIEW / INDIE STUDY</p><h2>My Session Range</h2><p>Highlight your chosen session’s high and low. Separate from Dark Orders and the anchor.</p><Link className="button secondary" href="/session-range">Open My Session Range</Link></section>
     <footer>TRADING BRAIN / DARK ORDERS <span>NOT FINANCIAL ADVICE</span></footer>
   </main>;
 }

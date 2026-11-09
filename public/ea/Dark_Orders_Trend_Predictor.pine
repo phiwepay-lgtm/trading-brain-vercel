@@ -1,0 +1,134 @@
+//@version=6
+indicator("Dark Orders + Trend Predictor — 2 in 1", shorttitle="Dark + Anchor", overlay=true, max_bars_back=250, max_labels_count=500, max_lines_count=500)
+
+// Price-only range and body expansion relative to their rolling averages.
+len = input.int(50, "Prevailing Lookback (what is normal)", minval=1)
+rangeMult = input.float(1.8, "Range Expansion (1.8x = unusual)")
+bodyMult = input.float(1.8, "Body Expansion")
+showTable = input.bool(true, "Show History Recap Table")
+tableLookback = input.int(20, "Number of recent signals in table", minval=1, maxval=100)
+
+barRange = high - low
+body = math.abs(close - open)
+prevRange = ta.sma(barRange, len)
+prevBody = ta.sma(body, len)
+rangeStd = ta.stdev(barRange, len)
+bodyStd = ta.stdev(body, len)
+
+rangeRvol = prevRange > 0 ? barRange / prevRange : 1.0
+rangeZ = rangeStd > 0 ? (barRange - prevRange) / rangeStd : 0.0
+bodyRvol = prevBody > 0 ? body / prevBody : 1.0
+bodyZ = bodyStd > 0 ? (body - prevBody) / bodyStd : 0.0
+
+isRangeUnusual = rangeRvol >= rangeMult and rangeZ >= 1.5
+isBodyUnusual = bodyRvol >= bodyMult and bodyZ >= 1.5
+
+// The Heikin Ashi body is calculated on the current chart timeframe.
+haT = ticker.heikinashi(syminfo.tickerid)
+[haO, haC] = request.security(haT, timeframe.period, [open, close])
+haBody = math.abs(haC - haO)
+haBodyAvg = ta.sma(haBody, 20)
+haExpanding = haBody > haBodyAvg * 1.2
+
+isUnusual = isRangeUnusual and isBodyUnusual
+darkBull = isUnusual and haExpanding and close > open
+darkBear = isUnusual and haExpanding and close < open
+
+bullCol = color.new(#00E5FF, 10)
+bearCol = color.new(#FF3D57, 10)
+warnCol = color.new(color.orange, 30)
+barcolor(darkBull ? bullCol : darkBear ? bearCol : isUnusual ? warnCol : na, title="Pure Price Paint")
+
+plotshape(darkBull, "DARK+ Pure", style=shape.labelup, text="DARK+ PURE", location=location.belowbar, color=color.lime, textcolor=color.black, size=size.tiny)
+plotshape(darkBear, "DARK- Pure", style=shape.labeldown, text="DARK- PURE", location=location.abovebar, color=color.red, textcolor=color.white, size=size.tiny)
+
+// Record confirmed directional signals across the loaded chart history.
+// The table stores only the most recent N rows; totals cover all loaded bars.
+var int bullCount = 0
+var int bearCount = 0
+var signalTimes = array.new_int(0)
+var signalDirections = array.new_int(0)
+var signalPrices = array.new_float(0)
+
+if barstate.isconfirmed and (darkBull or darkBear)
+    if darkBull
+        bullCount += 1
+    else
+        bearCount += 1
+    array.unshift(signalTimes, time)
+    array.unshift(signalDirections, darkBull ? 1 : -1)
+    array.unshift(signalPrices, close)
+    if array.size(signalTimes) > tableLookback
+        array.pop(signalTimes)
+        array.pop(signalDirections)
+        array.pop(signalPrices)
+
+var table recap = table.new(position.top_right, 3, tableLookback + 2, bgcolor=color.new(color.black, 20), border_width=1)
+if barstate.islast
+    table.clear(recap, 0, 0, 2, tableLookback + 1)
+    if showTable
+        table.cell(recap, 0, 0, "BAR TIME*", text_color=color.white, text_size=size.tiny)
+        table.cell(recap, 1, 0, "TYPE / TF", text_color=color.white, text_size=size.tiny)
+        table.cell(recap, 2, 0, "CLOSE", text_color=color.white, text_size=size.tiny)
+        int stored = array.size(signalTimes)
+        if stored > 0
+            for i = 0 to stored - 1
+                int direction = array.get(signalDirections, i)
+                string typeStr = (direction == 1 ? "DARK+ " : "DARK- ") + timeframe.period
+                color signalColor = direction == 1 ? color.lime : color.red
+                table.cell(recap, 0, i + 1, str.format_time(array.get(signalTimes, i), "yyyy-MM-dd HH:mm", syminfo.timezone), text_color=color.white, text_size=size.tiny)
+                table.cell(recap, 1, i + 1, typeStr, text_color=signalColor, text_size=size.tiny)
+                table.cell(recap, 2, i + 1, str.tostring(array.get(signalPrices, i), format.mintick), text_color=color.white, text_size=size.tiny)
+        // Counts are not EOD/EOW counts: they cover all loaded bars.
+        table.cell(recap, 0, tableLookback + 1, "LOADED: " + str.tostring(bullCount + bearCount), text_color=color.yellow, text_size=size.tiny)
+        table.cell(recap, 1, tableLookback + 1, "BULL: " + str.tostring(bullCount), text_color=color.lime, text_size=size.tiny)
+        table.cell(recap, 2, tableLookback + 1, "BEAR: " + str.tostring(bearCount), text_color=color.red, text_size=size.tiny)
+
+// * Times are bar-open times in the symbol's exchange timezone.
+alertcondition(darkBull, "Dark Bull History", "DARK+ Pure printed")
+alertcondition(darkBear, "Dark Bear History", "DARK- Pure printed")
+
+// Trend Predictor anchor adapted from Rolling Candle Profile by Zeiierman.
+// Original (c) Zeiierman, CC BY-NC-SA 4.0: https://creativecommons.org/licenses/by-nc-sa/4.0/
+// Changes: anchor-only, VWAP/volume-weighted EMA blend and closed-candle display.
+// Dark Orders and the anchor are independent; neither is a filter for the other.
+// All available chart bars are processed to retain Dark Orders loaded-history
+// counts; anchor initialization can differ from the 2500-bar standalone script.
+// Data revisions or changes in loaded history can alter past values.
+
+gA = "Anchor"
+gV = "Appearance"
+anchType = input.string("VWAP + Volume-weighted EMA", "Anchor", options=["VWAP + Volume-weighted EMA", "EMA", "SMA", "VWMA", "VWAP", "Donchian Mid"], group=gA, tooltip="The default is an equal blend of VWAP and EMA(close × volume) / EMA(volume). It needs usable chart volume. VWMA and VWAP fall back to EMA if unavailable. Donchian Mid uses the preceding completed window.")
+anchorLen = input.int(21, "Length", minval=5, maxval=200, group=gA, tooltip="Lookback for the volume-weighted EMA, EMA, SMA, VWMA and Donchian Mid. VWAP uses the chart's VWAP calculation instead.")
+buyCol = input.color(#00EFB4, "Rising anchor", group=gV)
+sellCol = input.color(#FF3D6E, "Falling anchor", group=gV)
+anchOn = input.bool(true, "Show anchor", group=gV)
+glowOn = input.bool(true, "Show anchor glow", group=gV)
+
+// Compute each time series on every bar. Selecting an input restarts the script.
+baseEma = ta.ema(close, anchorLen)
+baseSma = ta.sma(close, anchorLen)
+baseVwma = ta.vwma(close, anchorLen)
+baseVwap = ta.vwap(hlc3)
+// Zero or unavailable volume contributes no weight, and the blend is hidden
+// for a bar with no usable volume instead of silently substituting another line.
+validVolume = not na(volume) and volume > 0
+volumeWeight = validVolume ? volume : 0.0
+weightedCloseEma = ta.ema(close * volumeWeight, anchorLen)
+volumeEma = ta.ema(volumeWeight, anchorLen)
+volumeWeightedEma = validVolume and volumeEma > 0 ? weightedCloseEma / volumeEma : na
+blendedAnchor = validVolume and not na(baseVwap) and not na(volumeWeightedEma) ? (baseVwap + volumeWeightedEma) * 0.5 : na
+baseDonchian = (ta.highest(high, anchorLen)[1] + ta.lowest(low, anchorLen)[1]) * 0.5
+anchor = switch anchType
+    "VWAP + Volume-weighted EMA" => blendedAnchor
+    "SMA" => baseSma
+    "VWMA" => na(baseVwma) ? baseEma : baseVwma
+    "VWAP" => na(baseVwap) ? baseEma : baseVwap
+    "Donchian Mid" => baseDonchian
+    => baseEma
+
+// No developing-bar value is drawn. Values become visible on candle close.
+anchorCol = anchor >= nz(anchor[1], anchor) ? buyCol : sellCol
+confirmedAnchor = anchOn and barstate.isconfirmed ? anchor : na
+plot(glowOn ? confirmedAnchor : na, "Anchor Glow", color=color.new(anchorCol, 50), linewidth=6, style=plot.style_linebr)
+plot(confirmedAnchor, "Anchor", color=anchorCol, linewidth=2, style=plot.style_linebr)
