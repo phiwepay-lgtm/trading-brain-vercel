@@ -1,2 +1,5 @@
-import { redirect } from 'next/navigation';
-export default function Home() { redirect('/chart'); }
+import DownloadCenter from './ea/download-center';
+
+export default function HomePage() {
+  return <DownloadCenter />;
+}
