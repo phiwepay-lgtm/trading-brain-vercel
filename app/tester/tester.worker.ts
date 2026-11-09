@@ -1,5 +1,8 @@
 import { parseMarketCSV, historyQuality, MAX_HISTORY_BYTES, MAX_HISTORY_ROWS } from '../../lib/strategy/history.mjs';
 import { runResearchTester } from '../../lib/strategy/tester.mjs';
+import { buildM5 } from '../../lib/strategy/history.mjs';
+import { compareDarkOrders } from '../../lib/strategy/dark-orders.mjs';
+import { runProV1Research } from '../../lib/strategy/pro-v1-research.mjs';
 
 const ctx: any = self;
 let bars: any[] = [];
@@ -65,7 +68,18 @@ ctx.onmessage = async (event: MessageEvent) => {
     } else if(type==='run') {
       if(!bars.length) throw new Error('Import M1 market history first.');
       ctx.postMessage({type:'progress',message:'Running closed-bar research replay…'});
-      const result=runResearchTester(bars,event.data.params,event.data.options);
+      const result: any=runResearchTester(bars,event.data.params,event.data.options);
+      if(event.data.darkOrders) {
+        ctx.postMessage({type:'progress',message:'Comparing completed M5 volume confluence…'});
+        const history=event.data.options.endTime===null?bars:bars.filter((b:any)=>b.time<event.data.options.endTime);
+        const m5=buildM5(history).bars;
+        result.darkOrders=compareDarkOrders(m5,result);
+        ctx.postMessage({type:'progress',message:'Comparing independent-position Pro V1 research…'});
+        const pro=runProV1Research(history,event.data.params,{startTime:event.data.options.startTime,endTime:event.data.options.endTime});
+        result.darkOrdersPro=compareDarkOrders(m5,{trades:pro.positions.closed,open:pro.positions.open.length?true:null,censored:pro.positions.censored});
+        result.darkOrdersPro.open=pro.positions.open.length;
+        result.darkOrdersPro.invalid=pro.positions.invalidSignals;
+      }
       ctx.postMessage({type:'result',result});
     } else if(type==='view') {
       if(!bars.length) return;
