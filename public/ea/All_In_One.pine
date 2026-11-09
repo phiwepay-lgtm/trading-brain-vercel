@@ -373,27 +373,45 @@ if showFRVP and barstate.islast
     if not timeframe.isintraday or timeframe.in_seconds() < 60 or timeframe.in_seconds() > 3600
         table.cell(frStatus, 0, 0, "Use standard intraday candles, 1m–1h", text_color=color.white, bgcolor=color.red)
     else
+        // Profile the most recent COMPLETED UTC+2 window so a range is usually
+        // visible even before today's window has finished. Wall-clock times in
+        // FTZ are used so the comparison does not depend on the symbol's
+        // exchange timezone.
         int y = year(time, FTZ)
         int m = month(time, FTZ)
         int d = dayofmonth(time, FTZ)
-        int fStart = timestamp(FTZ, y, m, d, math.max(0, frvpNQOpen - frvpPreHours), 0)
-        int fEnd = timestamp(FTZ, y, m, d, frvpEndHour, 0)
+        int startTotal = math.max(0, frvpNQOpen - frvpPreHours) * 60
+        int endTotal = frvpEndHour * 60
+        int lastTod = hour(time, FTZ) * 60 + minute(time, FTZ)
+        bool prevDay = lastTod < endTotal
+        int refDayTS = timestamp(FTZ, y, m, d, 0, 0)
+        if prevDay
+            refDayTS := refDayTS - 1
+        int ry = year(refDayTS, FTZ)
+        int rm = month(refDayTS, FTZ)
+        int rd = dayofmonth(refDayTS, FTZ)
         int found = 0
         float hi = na
         float lo = na
         bool missingVolume = false
         int available = math.min(maxBars, bar_index + 1)
         for i = 0 to available - 1
-            int t = time[i]
-            if t <= fEnd and t >= fStart
-                array.push(frIdx, i)
-                found += 1
-                hi := na(hi) ? high[i] : math.max(hi, high[i])
-                lo := na(lo) ? low[i] : math.min(lo, low[i])
-                missingVolume := missingVolume or na(volume[i])
-            else if t < fStart
+            int fy = year(time[i], FTZ)
+            int fm = month(time[i], FTZ)
+            int fd = dayofmonth(time[i], FTZ)
+            if fy == ry and fm == rm and fd == rd
+                int tod = hour(time[i], FTZ) * 60 + minute(time[i], FTZ)
+                if tod >= startTotal and tod <= endTotal
+                    array.push(frIdx, i)
+                    found += 1
+                    hi := na(hi) ? high[i] : math.max(hi, high[i])
+                    lo := na(lo) ? low[i] : math.min(lo, low[i])
+                    missingVolume := missingVolume or na(volume[i])
+                else if tod < startTotal
+                    break
+            else
                 break
-        bool truncated = available == maxBars and bar_index + 1 > maxBars and time[available - 1] >= fStart
+        bool truncated = available == maxBars and bar_index + 1 > maxBars and found == available
         bool historyStart = found == bar_index + 1
         float span = hi - lo
         array<float> ups = array.new_float(rows, 0.0)
@@ -479,7 +497,7 @@ if showFRVP and barstate.islast
                 array.push(frLines, line.new(startBar, lo + (poc + 0.5) * step, endBar, lo + (poc + 0.5) * step, color=color.yellow, width=2))
                 array.push(frLines, line.new(startBar, lo + (vah + 1) * step, endBar, lo + (vah + 1) * step, color=color.aqua))
                 array.push(frLines, line.new(startBar, lo + val * step, endBar, lo + val * step, color=color.aqua))
-                table.cell(frStatus, 0, 0, "Fixed VP • " + str.tostring(found) + " bars" + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n" + str.tostring(frvpNQOpen - frvpPreHours) + ":00–" + str.tostring(frvpEndHour) + ":00 " + FTZ + " • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
+                table.cell(frStatus, 0, 0, "Fixed VP • " + str.tostring(found) + " bars" + (prevDay ? " • PREV DAY" : "") + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n" + str.tostring(frvpNQOpen - frvpPreHours) + ":00–" + str.tostring(frvpEndHour) + ":00 " + FTZ + " • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
             else
                 table.cell(frStatus, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
         else
