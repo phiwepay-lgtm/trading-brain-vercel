@@ -24,6 +24,7 @@ test('All In One Pine combines every TradingView study into one indicator', () =
   // NQ Developing Volume Profile
   for (const text of [
     '16:00', 'NQ profile', 'f_anchor', 'areaPercent', 'max_boxes_count=200',
+    'f_anchor(time[i]) != sessAnchor', 'not in loaded history',
   ]) assert.ok(all.includes(text), `Missing NQ: ${text}`);
   // VVWAP (daily reset)
   for (const text of [

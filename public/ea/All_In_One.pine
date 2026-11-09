@@ -236,7 +236,7 @@ if showNQ and barstate.islast
         bool missingVolume = false
         int available = math.min(maxBars, bar_index + 1)
         for i = 0 to available - 1
-            if f_anchor(time[i]) != anchor
+            if f_anchor(time[i]) != sessAnchor
                 break
             found += 1
             hi := na(hi) ? high[i] : math.max(hi, high[i])
@@ -331,7 +331,7 @@ if showNQ and barstate.islast
             else
                 table.cell(status, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
         else
-            table.cell(status, 0, 0, "Not enough price range to build profile", text_color=color.white, bgcolor=color.red)
+            table.cell(status, 0, 0, "NQ 16:00 NY window not in loaded history — scroll back to include 16:00 NY", text_color=color.white, bgcolor=color.red)
 
 // ============================ 5. VVWAP (daily reset) ============================
 // Volume-Weighted Average Price that resets at the start of each day.
