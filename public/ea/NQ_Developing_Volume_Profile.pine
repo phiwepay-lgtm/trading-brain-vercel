@@ -1,0 +1,135 @@
+//@version=6
+indicator("Blackwatch - NQ Developing Volume Profile (approximation)", overlay=true, max_boxes_count=200, max_lines_count=3, max_bars_back=2000)
+// Independent chart-bar approximation, not TradingView's proprietary SVP HD.
+// Latest 16:00-to-16:00 America/New_York window only; normal intraday candles recommended.
+// Uniform volume over each candle's high-low range; directional volume is candle direction,
+// NOT aggressor buy/sell. Zero-volume/missing bars, gaps and incomplete history affect output.
+int rows = input.int(40, "Price rows", minval=10, maxval=100)
+int maxBars = input.int(1500, "Maximum bars to scan", minval=10, maxval=1800, tooltip="If the limit is reached, the profile can be incomplete. 1500 supports about 24 hours of 1-minute bars.")
+float areaPercent = input.float(70.0, "Value area %", minval=1, maxval=100, step=1)
+string mode = input.string("Total", "Volume display", options=["Total", "Up/Down", "Delta"])
+float widthPct = input.float(30.0, "Maximum histogram width (% of observed range)", minval=5, maxval=100)
+const string TZ = "America/New_York"
+
+// timestamp() normalizes the previous calendar day, including year and DST transitions.
+f_anchor(int t) =>
+    int y = year(t, TZ)
+    int m = month(t, TZ)
+    int d = dayofmonth(t, TZ)
+    int dayOffset = hour(t, TZ) >= 16 ? 0 : -1
+    timestamp(TZ, y, m, d + dayOffset, 16, 0)
+
+var array<box> boxes = array.new<box>()
+var array<line> lines = array.new<line>()
+var table status = table.new(position.top_right, 1, 1)
+if barstate.islast
+    while array.size(boxes) > 0
+        box.delete(array.pop(boxes))
+    while array.size(lines) > 0
+        line.delete(array.pop(lines))
+    if not timeframe.isintraday or timeframe.in_seconds() < 60 or timeframe.in_seconds() > 3600
+        table.cell(status, 0, 0, "Use standard intraday candles, 1m–1h", text_color=color.white, bgcolor=color.red)
+    else
+        int anchor = f_anchor(time)
+        int found = 0
+        float hi = na
+        float lo = na
+        bool missingVolume = false
+        int available = math.min(maxBars, bar_index + 1)
+        for i = 0 to available - 1
+            if f_anchor(time[i]) != anchor
+                break
+            found += 1
+            hi := na(hi) ? high[i] : math.max(hi, high[i])
+            lo := na(lo) ? low[i] : math.min(lo, low[i])
+            missingVolume := missingVolume or na(volume[i])
+        bool truncated = found == maxBars and bar_index + 1 > maxBars and f_anchor(time[maxBars]) == anchor
+        bool historyStart = found == bar_index + 1
+        float span = hi - lo
+        array<float> ups = array.new_float(rows, 0.0)
+        array<float> downs = array.new_float(rows, 0.0)
+        float total = 0.0
+        if found > 0 and span > 0
+            float step = span / rows
+            for i = 0 to found - 1
+                float v = nz(volume[i], 0)
+                if v > 0
+                    float candleSpan = high[i] - low[i]
+                    bool up = close[i] >= open[i]
+                    if candleSpan <= 0
+                        int b = math.max(0, math.min(rows - 1, int(math.floor((close[i] - lo) / step))))
+                        if up
+                            array.set(ups, b, array.get(ups, b) + v)
+                        else
+                            array.set(downs, b, array.get(downs, b) + v)
+                    else
+                        int first = math.max(0, math.min(rows - 1, int(math.floor((low[i] - lo) / step))))
+                        int last = math.max(0, math.min(rows - 1, int(math.floor((high[i] - lo) / step))))
+                        for j = first to last
+                            float overlap = math.max(0.0, math.min(high[i], lo + (j + 1) * step) - math.max(low[i], lo + j * step))
+                            float portion = v * overlap / candleSpan
+                            if up
+                                array.set(ups, j, array.get(ups, j) + portion)
+                            else
+                                array.set(downs, j, array.get(downs, j) + portion)
+                    total += v
+            if total > 0
+                int poc = 0
+                float maxTotal = -1.0
+                float maxDisplay = 0.0
+                for j = 0 to rows - 1
+                    float u = array.get(ups, j)
+                    float d = array.get(downs, j)
+                    float rowTotal = u + d
+                    if rowTotal > maxTotal
+                        maxTotal := rowTotal
+                        poc := j
+                    maxDisplay := math.max(maxDisplay, mode == "Delta" ? math.abs(u - d) : rowTotal)
+                int val = poc
+                int vah = poc
+                float included = maxTotal
+                float target = total * areaPercent / 100.0
+                // Adjacent row with greater volume; ties nearest POC, then above.
+                for iteration = 0 to rows - 1
+                    if included >= target or (val == 0 and vah == rows - 1)
+                        break
+                    float below = val > 0 ? array.get(ups, val - 1) + array.get(downs, val - 1) : -1.0
+                    float above = vah < rows - 1 ? array.get(ups, vah + 1) + array.get(downs, vah + 1) : -1.0
+                    bool chooseAbove = above > below or (above == below and vah + 1 - poc <= poc - (val - 1))
+                    float candidate = chooseAbove ? above : below
+                    if candidate < 0 or included + candidate > target
+                        break
+                    included += candidate
+                    if chooseAbove
+                        vah += 1
+                    else
+                        val -= 1
+                int start = bar_index - found + 1
+                int maxWidth = math.max(1, math.min(400, int(math.round(math.max(1, found - 1) * widthPct / 100))))
+                for j = 0 to rows - 1
+                    float u = array.get(ups, j)
+                    float d = array.get(downs, j)
+                    float displayVol = mode == "Delta" ? math.abs(u - d) : u + d
+                    if displayVol > 0 and maxDisplay > 0
+                        int width = math.max(1, int(math.round(maxWidth * displayVol / maxDisplay)))
+                        float bottom = lo + step * j
+                        float top = lo + step * (j + 1)
+                        bool inVA = j >= val and j <= vah
+                        color base = inVA ? color.new(color.blue, 30) : color.new(color.gray, 55)
+                        if mode == "Up/Down"
+                            int upWidth = int(math.round(width * u / (u + d)))
+                            if upWidth > 0
+                                array.push(boxes, box.new(start, top, start + upWidth, bottom, border_color=na, bgcolor=inVA ? color.new(color.teal, 25) : color.new(color.teal, 65)))
+                            if width > upWidth
+                                array.push(boxes, box.new(start + upWidth, top, start + width, bottom, border_color=na, bgcolor=inVA ? color.new(color.red, 25) : color.new(color.red, 65)))
+                        else
+                            color c = mode == "Delta" ? (u >= d ? color.new(color.teal, inVA ? 25 : 65) : color.new(color.red, inVA ? 25 : 65)) : base
+                            array.push(boxes, box.new(start, top, start + width, bottom, border_color=na, bgcolor=c))
+                array.push(lines, line.new(start, lo + (poc + 0.5) * step, bar_index, lo + (poc + 0.5) * step, color=color.yellow, width=2))
+                array.push(lines, line.new(start, lo + (vah + 1) * step, bar_index, lo + (vah + 1) * step, color=color.aqua))
+                array.push(lines, line.new(start, lo + val * step, bar_index, lo + val * step, color=color.aqua))
+                table.cell(status, 0, 0, "NQ profile • " + str.tostring(found) + " bars" + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n16:00 NY → now • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
+            else
+                table.cell(status, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
+        else
+            table.cell(status, 0, 0, "Not enough price range to build profile", text_color=color.white, bgcolor=color.red)
