@@ -1,0 +1,94 @@
+# indie:lang_version = 5
+# Draft inspired by Blackwatch Advisory - My Session Range, itself a
+# modification of RobMinty's FXN - Asian Session Range.
+# NOT compiled or tested in the user's Indie editor. Draws only the latest
+# observed session, ending at the open of the last observed session bar rather
+# than projecting to the configured session end. The developing range changes.
+# Session membership uses bar-open timestamps. Use aligned intraday candles.
+# UTC-5 fixed EST is Etc/GMT+5; America/New_York follows daylight saving.
+from math import isnan, nan
+from datetime import time
+from indie import indicator, param, MainContext, MutSeriesF, color, line_style
+from indie.schedule import ScheduleRule, Schedule, ALL_DAYS
+from indie.drawings import Rectangle, LineSegment, AbsolutePosition
+
+@indicator('Blackwatch Advisory - My Session Range (draft)', overlay_main_pane=True)
+@param.bool('show_session', default=True, title='Show session')
+@param.int('start_hour', default=3, min=0, max=23, title='Start hour')
+@param.int('start_minute', default=0, min=0, max=59, title='Start minute')
+@param.int('end_hour', default=7, min=0, max=23, title='End hour')
+@param.int('end_minute', default=0, min=0, max=59, title='End minute')
+@param.str('timezone', default='Etc/GMT+5', title='Timezone (IANA)')
+@param.bool('show_horizontal', default=True, title='Horizontal lines')
+@param.bool('show_vertical', default=True, title='Vertical lines')
+@param.color('border_color', default=color.TEAL, title='Border color')
+@param.color('fill_color', default=color.AQUA(0.1), title='Fill color')
+@param.int('line_width', default=1, min=1, max=10, title='Border width')
+@param.str('style', default='solid', options=['solid', 'dashed', 'dotted'], title='Border style')
+class Main(MainContext):
+    def __init__(self, start_hour, start_minute, end_hour, end_minute, timezone):
+        rule = ScheduleRule(start=time(hour=start_hour, minute=start_minute), end=time(hour=end_hour, minute=end_minute), days=ALL_DAYS)
+        self._session = Schedule(rules=[rule], timezone=timezone)
+        origin = AbsolutePosition(0, 0)
+        self._box = Rectangle(origin, origin, line_color=color.TRANSPARENT, bg_color=color.AQUA(0.1))
+        self._top = LineSegment(origin, origin, color=color.TEAL)
+        self._bottom = LineSegment(origin, origin, color=color.TEAL)
+        self._left = LineSegment(origin, origin, color=color.TEAL)
+        self._right = LineSegment(origin, origin, color=color.TEAL)
+
+    def calc(self, show_session, show_horizontal, show_vertical, border_color, fill_color, line_width, style):
+        in_session = self.time[0] in self._session
+        last_seen = MutSeriesF.new(init=nan)
+        first_seen = MutSeriesF.new(init=nan)
+        range_high = MutSeriesF.new(init=nan)
+        range_low = MutSeriesF.new(init=nan)
+        last_seen[0] = last_seen[1]
+        first_seen[0] = first_seen[1]
+        range_high[0] = range_high[1]
+        range_low[0] = range_low[1]
+        if in_session:
+            new_session = isnan(last_seen[1]) or not self._session.is_same_period(last_seen[1], self.time[0])
+            if new_session:
+                first_seen[0] = self.time[0]
+                range_high[0] = self.high[0]
+                range_low[0] = self.low[0]
+            else:
+                range_high[0] = max(range_high[1], self.high[0])
+                range_low[0] = min(range_low[1], self.low[0])
+            last_seen[0] = self.time[0]
+
+        if self.is_last_bar and show_session and not isnan(first_seen[0]) and not isnan(last_seen[0]):
+            left = first_seen[0]
+            right = last_seen[0]
+            hi = range_high[0]
+            lo = range_low[0]
+            edge_style = line_style.DASHED if style == 'dashed' else line_style.DOTTED if style == 'dotted' else line_style.SOLID
+            self._box.point_a = AbsolutePosition(left, hi)
+            self._box.point_b = AbsolutePosition(right, lo)
+            self._box.bg_color = fill_color
+            self._top.point_a = AbsolutePosition(left, hi)
+            self._top.point_b = AbsolutePosition(right, hi)
+            self._bottom.point_a = AbsolutePosition(left, lo)
+            self._bottom.point_b = AbsolutePosition(right, lo)
+            self._left.point_a = AbsolutePosition(left, hi)
+            self._left.point_b = AbsolutePosition(left, lo)
+            self._right.point_a = AbsolutePosition(right, hi)
+            self._right.point_b = AbsolutePosition(right, lo)
+            self._top.color = border_color if show_horizontal else color.TRANSPARENT
+            self._bottom.color = border_color if show_horizontal else color.TRANSPARENT
+            self._left.color = border_color if show_vertical else color.TRANSPARENT
+            self._right.color = border_color if show_vertical else color.TRANSPARENT
+            self._top.line_style = edge_style
+            self._bottom.line_style = edge_style
+            self._left.line_style = edge_style
+            self._right.line_style = edge_style
+            self._top.line_width = line_width
+            self._bottom.line_width = line_width
+            self._left.line_width = line_width
+            self._right.line_width = line_width
+            self.chart.draw(self._box)
+            self.chart.draw(self._top)
+            self.chart.draw(self._bottom)
+            self.chart.draw(self._left)
+            self.chart.draw(self._right)
+        return

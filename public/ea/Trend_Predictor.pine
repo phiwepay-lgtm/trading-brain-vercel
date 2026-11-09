@@ -1,0 +1,49 @@
+//@version=6
+// Adapted from Rolling Candle Profile with Buy/Sell Signals by Zeiierman.
+// Original work (c) Zeiierman, licensed under Creative Commons
+// Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0):
+// https://creativecommons.org/licenses/by-nc-sa/4.0/
+// Changes: retained and extended the anchor with an equal VWAP/volume-weighted
+// EMA blend; removed pressure profile, signals and alerts. Anchor and glow are
+// shown only after the chart candle closes.
+// Provider data revisions, loaded history and changes to settings can still
+// change past values on reload. Volume-based anchors use chart volume; the
+// blended anchor is unavailable when the current bar has no usable volume.
+indicator("Trend Predictor — Anchor (Zeiierman)", overlay=true, max_bars_back=250, calc_bars_count=2500)
+
+gA = "Anchor"
+gV = "Appearance"
+anchType = input.string("VWAP + Volume-weighted EMA", "Anchor", options=["VWAP + Volume-weighted EMA", "EMA", "SMA", "VWMA", "VWAP", "Donchian Mid"], group=gA, tooltip="The default is an equal blend of VWAP and EMA(close × volume) / EMA(volume). It needs usable chart volume. VWMA and VWAP fall back to EMA if unavailable. Donchian Mid uses the preceding completed window.")
+anchorLen = input.int(21, "Length", minval=5, maxval=200, group=gA, tooltip="Lookback for the volume-weighted EMA, EMA, SMA, VWMA and Donchian Mid. VWAP uses the chart's VWAP calculation instead.")
+buyCol = input.color(#00EFB4, "Rising anchor", group=gV)
+sellCol = input.color(#FF3D6E, "Falling anchor", group=gV)
+anchOn = input.bool(true, "Show anchor", group=gV)
+glowOn = input.bool(true, "Show anchor glow", group=gV)
+
+// Compute each time series on every bar. Selecting an input restarts the script.
+baseEma = ta.ema(close, anchorLen)
+baseSma = ta.sma(close, anchorLen)
+baseVwma = ta.vwma(close, anchorLen)
+baseVwap = ta.vwap(hlc3)
+// Zero or unavailable volume contributes no weight, and the blend is hidden
+// for a bar with no usable volume instead of silently substituting another line.
+validVolume = not na(volume) and volume > 0
+volumeWeight = validVolume ? volume : 0.0
+weightedCloseEma = ta.ema(close * volumeWeight, anchorLen)
+volumeEma = ta.ema(volumeWeight, anchorLen)
+volumeWeightedEma = validVolume and volumeEma > 0 ? weightedCloseEma / volumeEma : na
+blendedAnchor = validVolume and not na(baseVwap) and not na(volumeWeightedEma) ? (baseVwap + volumeWeightedEma) * 0.5 : na
+baseDonchian = (ta.highest(high, anchorLen)[1] + ta.lowest(low, anchorLen)[1]) * 0.5
+anchor = switch anchType
+    "VWAP + Volume-weighted EMA" => blendedAnchor
+    "SMA" => baseSma
+    "VWMA" => na(baseVwma) ? baseEma : baseVwma
+    "VWAP" => na(baseVwap) ? baseEma : baseVwap
+    "Donchian Mid" => baseDonchian
+    => baseEma
+
+// No developing-bar value is drawn. Values become visible on candle close.
+anchorCol = anchor >= nz(anchor[1], anchor) ? buyCol : sellCol
+confirmedAnchor = anchOn and barstate.isconfirmed ? anchor : na
+plot(glowOn ? confirmedAnchor : na, "Anchor Glow", color=color.new(anchorCol, 50), linewidth=6, style=plot.style_linebr)
+plot(confirmedAnchor, "Anchor", color=anchorCol, linewidth=2, style=plot.style_linebr)

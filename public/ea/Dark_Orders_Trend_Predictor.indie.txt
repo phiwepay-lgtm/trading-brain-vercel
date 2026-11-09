@@ -1,0 +1,75 @@
+# indie:lang_version = 5
+# RESEARCH DRAFT: adaptation of Dark Orders Pure Price + History and the
+# Trend Predictor anchor. Use on a standard OHLC chart. Not compiled or tested
+# in the user's Indie editor. Dark Orders and the anchor are independent.
+# Anchor adapted from Rolling Candle Profile by Zeiierman, (c) Zeiierman,
+# CC BY-NC-SA 4.0 https://creativecommons.org/licenses/by-nc-sa/4.0/
+# Changes: anchor only, equal VWAP / volume-weighted EMA blend, closed-bar line.
+# This Indie draft omits the Dark Orders history table and alert conditions.
+# Dark Orders bar colors and markers can change on an open candle. The anchor
+# uses closed bars only, but data/feed revisions can change results after reload.
+# Heikin Ashi is reconstructed from the chart's OHLC and can differ from
+# TradingView's separately requested Heikin Ashi feed. Feed volume and session
+# boundaries can differ across platforms. This is not a verified replica.
+from math import isnan, nan
+from indie import indicator, param, plot, color, MutSeriesF
+from indie.algorithms import Ema, Sma, StdDev, Vwap
+
+@indicator('Dark Orders + Trend Predictor (draft)', overlay_main_pane=True)
+@param.int('length', default=50, min=1, title='Dark Orders lookback')
+@param.float('range_mult', default=1.8, title='Range expansion')
+@param.float('body_mult', default=1.8, title='Body expansion')
+@param.int('anchor_len', default=21, min=5, max=200, title='Volume-weighted EMA length')
+@param.bool('show_anchor', default=True, title='Show anchor')
+@param.bool('show_dark', default=True, title='Show Dark Orders')
+@plot.line(title='Anchor', line_width=2)
+@plot.bar_color(title='Dark Orders candle color')
+@plot.marker(title='DARK+ PURE', style=plot.marker_style.LABEL, position=plot.marker_position.BELOW, color=color.LIME)
+@plot.marker(title='DARK- PURE', style=plot.marker_style.LABEL, position=plot.marker_position.ABOVE, color=color.RED)
+def Main(self, length, range_mult, body_mult, anchor_len, show_anchor, show_dark):
+    # Dark Orders: only chart price and reconstructed Heikin Ashi; no volume.
+    bar_range = MutSeriesF.new(self.high[0] - self.low[0])
+    body = MutSeriesF.new(abs(self.close[0] - self.open[0]))
+    avg_range = Sma.new(bar_range, length)[0]
+    avg_body = Sma.new(body, length)[0]
+    std_range = StdDev.new(bar_range, length)[0]
+    std_body = StdDev.new(body, length)[0]
+    range_rvol = bar_range[0] / avg_range if avg_range > 0 else 1.0
+    body_rvol = body[0] / avg_body if avg_body > 0 else 1.0
+    range_z = (bar_range[0] - avg_range) / std_range if std_range > 0 else 0.0
+    body_z = (body[0] - avg_body) / std_body if std_body > 0 else 0.0
+    unusual = range_rvol >= range_mult and range_z >= 1.5 and body_rvol >= body_mult and body_z >= 1.5
+    ha_close = MutSeriesF.new((self.open[0] + self.high[0] + self.low[0] + self.close[0]) / 4.0)
+    ha_open = MutSeriesF.new(init=nan)
+    ha_open[0] = (self.open[0] + self.close[0]) / 2.0 if isnan(ha_open[1]) else (ha_open[1] + ha_close[1]) / 2.0
+    ha_body = MutSeriesF.new(abs(ha_close[0] - ha_open[0]))
+    ha_body_avg = Sma.new(ha_body, 20)[0]
+    ha_expanding = ha_body[0] > ha_body_avg * 1.2
+    dark_bull = unusual and ha_expanding and self.close[0] > self.open[0]
+    dark_bear = unusual and ha_expanding and self.close[0] < self.open[0]
+    candle_color = None
+    if show_dark:
+        if dark_bull:
+            candle_color = color.rgba(0, 229, 255, 0.9)
+        elif dark_bear:
+            candle_color = color.rgba(255, 61, 87, 0.9)
+        elif unusual:
+            candle_color = color.ORANGE(0.7)
+
+    # Trend Predictor anchor: equal session VWAP and volume-weighted EMA.
+    # Zero/missing volume has zero weight and suppresses the current anchor.
+    valid_volume = not isnan(self.volume[0]) and self.volume[0] > 0.0
+    weight = MutSeriesF.new(self.volume[0] if valid_volume else 0.0)
+    weighted_close = MutSeriesF.new(self.close[0] * weight[0])
+    weight_ema = Ema.new(weight, anchor_len)
+    weighted_close_ema = Ema.new(weighted_close, anchor_len)
+    session_vwap, upper, lower = Vwap.new(self.hlc3, 'Session', 1.0)
+    blend = MutSeriesF.new(init=nan)
+    if valid_volume and weight_ema[0] > 0.0 and not isnan(session_vwap[0]):
+        blend[0] = (session_vwap[0] + weighted_close_ema[0] / weight_ema[0]) * 0.5
+    anchor_color = color.hex('#00EFB4') if isnan(blend[1]) or blend[0] >= blend[1] else color.hex('#FF3D6E')
+    closed_anchor = blend[0] if show_anchor and self.is_closed_bar else nan
+    bull_marker = self.low[0] if show_dark and dark_bull else nan
+    bear_marker = self.high[0] if show_dark and dark_bear else nan
+    return (plot.Line(closed_anchor, color=anchor_color), plot.BarColor(candle_color),
+            plot.Marker(bull_marker, text='DARK+ PURE'), plot.Marker(bear_marker, text='DARK- PURE'))
