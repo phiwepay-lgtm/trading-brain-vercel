@@ -25,6 +25,15 @@ test('All In One Pine combines every TradingView study into one indicator', () =
   for (const text of [
     '16:00', 'NQ profile', 'f_anchor', 'areaPercent', 'max_boxes_count=200',
   ]) assert.ok(all.includes(text), `Missing NQ: ${text}`);
+  // VVWAP (daily reset)
+  for (const text of [
+    'VVWAP (daily)', 'showVVWAP', 'dayofmonth(time) != dayofmonth(time[1])',
+  ]) assert.ok(all.includes(text), `Missing VVWAP: ${text}`);
+  // Fixed Range Volume Profile (dedicated UTC+2 window)
+  for (const text of [
+    'Fixed Range VP', 'showFRVP', 'frvpNQOpen', 'frvpPreHours', 'frvpEndHour',
+    'FTZ = "UTC+2"', 'fStart = timestamp', 'position.bottom_left',
+  ]) assert.ok(all.includes(text), `Missing FRVP: ${text}`);
 });
 
 test('All In One does not carry the standalone anchor calculation limit', () => {
