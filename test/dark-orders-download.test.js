@@ -18,6 +18,8 @@ test('Dark Orders Pure Price uses the supplied price and Heikin Ashi filters wit
     'isUnusual = isRangeUnusual and isBodyUnusual',
     'darkBull = isUnusual and haExpanding and close > open',
     'darkBear = isUnusual and haExpanding and close < open',
+    'bullCol = color.new(#00E5FF, 10)', 'bearCol = color.new(#FF3D57, 10)',
+    'warnCol = color.new(color.orange, 30)',
     'barcolor(darkBull ? bullCol : darkBear ? bearCol : isUnusual ? warnCol : na',
     'alertcondition(darkBull', 'alertcondition(darkBear',
     'input.bool(true, "Show History Recap Table")',
