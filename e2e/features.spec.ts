@@ -50,10 +50,10 @@ test('upload validates files and communicates errors', async ({ page }) => {
   await expect(page.getByRole('status')).toContainText('Analysis is not configured');
 });
 
-test('EA Center is empty and the signal endpoint remains HOLD-only', async ({ page, request }) => {
+test('EA Center offers Dark Orders and the signal endpoint remains HOLD-only', async ({ page, request }) => {
   await page.goto('/ea');
-  await expect(page.getByRole('heading', { name: /No tools available yet/ })).toBeVisible();
-  await expect(page.locator('.ea-download-card a[download]')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: /Dark Orders/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Download Dark Orders' })).toBeVisible();
   expect(await (await request.get('/api/signal')).json()).toMatchObject({ action: 'HOLD', confidence: null });
   await page.goto('/ea/guide');
   await expect(page).toHaveURL(/\/ea$/);
