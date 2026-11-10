@@ -23,7 +23,7 @@ test('All In One Pine combines every TradingView study into one indicator', () =
   ]) assert.ok(all.includes(text), `Missing session: ${text}`);
   // NQ Developing Volume Profile
   for (const text of [
-    '16:00', 'NQ profile', 'f_anchor', 'areaPercent', 'max_boxes_count=200',
+    '16:00', 'NQ profile', 'f_anchor', 'areaPercent', 'max_boxes_count=400',
     'f_anchor(time[i]) != sessAnchor', 'not in loaded history',
   ]) assert.ok(all.includes(text), `Missing NQ: ${text}`);
   // VVWAP (daily reset)
@@ -32,10 +32,24 @@ test('All In One Pine combines every TradingView study into one indicator', () =
   ]) assert.ok(all.includes(text), `Missing VVWAP: ${text}`);
   // Session Volume Profile (attached to the session range window)
   for (const text of [
-    'Session VP', 'showFRVP', 'trackedStart', 'startTime[i] == trackedStart', 'position.bottom_left',
+    'Session VP', 'showFRVP', 'trackedStart', 'frStart[i] == frTrackedStart', 'position.bottom_left',
   ]) assert.ok(all.includes(text), `Missing FRVP: ${text}`);
 });
 
 test('All In One does not carry the standalone anchor calculation limit', () => {
   assert.doesNotMatch(all, /calc_bars_count=2500/);
+});
+
+
+test('Fixed-range profile has independent presets and reference body/wick allocation', () => {
+  const profile = all.split('// ====================== 6.')[1];
+  for (const text of ['LonesomeTheBlue', 'https://mozilla.org/MPL/2.0/',
+    'frTimePreset', 'frCustomHours', 'frZone', 'frColors', 'frCustomVAUp',
+    'frTrackedStart := frStart', 'frOverlap(', 'body + 2 * topWick + 2 * bottomWick',
+    'above >= below', 'frPOCLabel := label.new', 'Session VP frozen']) {
+    assert.ok(profile.includes(text), `Missing fixed-range feature: ${text}`);
+  }
+  assert.doesNotMatch(profile, /included \+ candidate > target/);
+  assert.doesNotMatch(profile, /\b(mode|areaPercent|widthPct|sessionHours|sessionZone)\b/);
+  assert.ok(profile.includes('int startBar = bar_index - array.get(frIdx, array.size(frIdx) - 1))'));
 });
