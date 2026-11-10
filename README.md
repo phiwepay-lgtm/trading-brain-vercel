@@ -36,3 +36,21 @@ The separate `/session-range` page offers a Pine v6 adaptation and an Indie v5 d
 ## All in one (Basic plan)
 
 `/all-in-one` provides `public/ea/All_In_One.pine`, a single TradingView Pine v6 indicator that combines Dark Orders, the Trend Predictor anchor, My Session Range, a daily-reset VVWAP, the NQ developing volume profile (16:00 New York, kept as a separate study) and a fixed-range Volume Profile for a dedicated UTC+2 window (default 11:00–19:00, like TradingView's Fix Range VP). Each study keeps its own input group and can be switched off; the NQ and fixed-range profiles are the heaviest and only draw on the last bar, so turn them off if a Basic-plan chart hits the 20-second calculation limit. The combined NQ status table is bottom-right and the Session VP table is bottom-left to avoid overlapping the Dark Orders recap. The Session VP is a fixed-range profile anchored to the session window (default 15:00–19:00 UTC+2). The script has not been compiled or verified in TradingView; PineTS executed its plots without error, which is not the TradingView compiler.
+
+### Fixed-range VP presets
+
+In All In One → **Session VP**, choose Custom, 11:00–19:00, 15:00–19:00,
+or 09:00–17:00, interpreted in the profile timezone (default UTC+2). Custom
+start/stop times support overnight windows. These inputs are independent of My
+Session Range and NQ. The latest window develops on every incoming candle/tick,
+excludes bars opening at the stop time, and remains frozen until the next window.
+Align boundaries to standard 1m–1h candles; straddling candles cannot be split.
+
+Colours: Original blue/orange, Teal/red, or four custom volume colours. POC colour,
+width, label and right extension are configurable. Rows default to 24, value area
+to 70%, width to one third of the observed window. Body/wick allocation is adapted
+from LonesomeTheBlue’s *Volume Profile / Fixed Range* under MPL 2.0
+(https://mozilla.org/MPL/2.0/). Wicks split equally between up/down; body follows
+candle direction. Value area expands from POC until it reaches or exceeds target.
+This is an estimate, not actual bid/ask volume. Missing history or the shared
+maximum scan limit can make it incomplete. TradingView compilation remains unverified.
