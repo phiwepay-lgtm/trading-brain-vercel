@@ -150,8 +150,8 @@ plot(confirmedAnchor, "Anchor", color=anchorCol, linewidth=2, style=plot.style_l
 // on Heikin Ashi these are synthetic, not real prices.
 gS = "My Session Range"
 showSession = input.bool(true, "Show session", group=gS, tooltip="Developing high/low steps for the selected session.")
-sessionHours = input.session("0300-0700", "Session time", group=gS, tooltip="Default 03:00–07:00 in the selected timezone. Overnight sessions are supported.")
-sessionZone = input.string("UTC-5", "Session timezone", group=gS, tooltip="UTC-5 is fixed EST with no daylight saving. Use America/New_York to follow Eastern daylight saving time.")
+sessionHours = input.session("1500-1900", "Session time", group=gS, tooltip="Your active window, e.g. 15:00–19:00 (3pm–7pm) in the selected timezone. Overnight sessions are supported. The Session VP is anchored to this window.")
+sessionZone = input.string("UTC+2", "Session timezone", group=gS, tooltip="UTC+2 matches your 1pm NQ open / 3pm–7pm session. Use America/New_York to follow Eastern daylight saving time.")
 showFill = input.bool(true, "Shade between high and low", group="Range Style")
 edgeColor = input.color(color.teal, "Range line color", group="Range Style")
 edgeWidth = input.int(1, "Range line width", minval=1, maxval=10, group="Range Style")
@@ -236,7 +236,7 @@ if showNQ and barstate.islast
         bool missingVolume = false
         int available = math.min(maxBars, bar_index + 1)
         for i = 0 to available - 1
-            if f_anchor(time[i]) != anchor
+            if f_anchor(time[i]) != sessAnchor
                 break
             found += 1
             hi := na(hi) ? high[i] : math.max(hi, high[i])
@@ -331,7 +331,7 @@ if showNQ and barstate.islast
             else
                 table.cell(status, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
         else
-            table.cell(status, 0, 0, "Not enough price range to build profile", text_color=color.white, bgcolor=color.red)
+            table.cell(status, 0, 0, "NQ 16:00 NY window not in loaded history — scroll back to include 16:00 NY", text_color=color.white, bgcolor=color.red)
 
 // ============================ 5. VVWAP (daily reset) ============================
 // Volume-Weighted Average Price that resets at the start of each day.
@@ -348,17 +348,15 @@ _cumV := _cumV + volume
 float vvwap = _cumV > 0 ? _cumPV / _cumV : na
 plot(showVVWAP ? vvwap : na, "VVWAP (daily)", color=color.yellow, linewidth=2)
 
-// ====================== 6. FIXED RANGE VOLUME PROFILE (session-attached) ======================
-// A fixed-range Volume Profile for a dedicated UTC+2 window (default 11:00–19:00), similar to
-// TradingView's "Fix Range" VP. Independent chart-bar approximation: uniform volume over each
-// candle range; directional volume is candle direction, NOT aggressor buy/sell. The developing
-// 16:00 NY profile above is kept as a separate study.
-gF = "Fixed Range VP"
-showFRVP = input.bool(true, "Show fixed-range VP (11–19 UTC+2)", group=gF, tooltip="Fixed-range volume profile for the dedicated UTC+2 window. Default start is 2 hours before the 13:00 UTC+2 NQ open; default end is 19:00 UTC+2.")
-frvpNQOpen = input.int(13, "NQ open hour (UTC+2)", minval=0, maxval=23, group=gF)
-frvpPreHours = input.int(2, "Hours before NQ open", minval=0, maxval=12, group=gF)
-frvpEndHour = input.int(19, "Window end hour (UTC+2)", minval=0, maxval=23, group=gF)
-const string FTZ = "UTC+2"
+// ====================== 6. SESSION VOLUME PROFILE (fixed range) ======================
+// A fixed-range Volume Profile attached to your session window (like TradingView's
+// "Fix Range" VP), spanning from the session start to the session close. It uses the
+// most recent session detected via the session range inputs. Independent chart-bar
+// approximation: uniform volume over each candle range; directional volume is candle
+// direction, NOT aggressor buy/sell. The developing 16:00 NY profile above is kept
+// as a separate study.
+gF = "Session VP"
+showFRVP = input.bool(true, "Show session VP (fixed range)", group=gF, tooltip="Fixed-range volume profile for your session window (session start → session close). Approximate, chart-bar volume; not SVP HD.")
 
 var array<box> frBoxes = array.new<box>()
 var array<line> frLines = array.new<line>()
@@ -373,43 +371,25 @@ if showFRVP and barstate.islast
     if not timeframe.isintraday or timeframe.in_seconds() < 60 or timeframe.in_seconds() > 3600
         table.cell(frStatus, 0, 0, "Use standard intraday candles, 1m–1h", text_color=color.white, bgcolor=color.red)
     else
-        // Profile the most recent COMPLETED UTC+2 window so a range is usually
-        // visible even before today's window has finished. Wall-clock times in
-        // FTZ are used so the comparison does not depend on the symbol's
-        // exchange timezone.
-        int y = year(time, FTZ)
-        int m = month(time, FTZ)
-        int d = dayofmonth(time, FTZ)
-        int startTotal = math.max(0, frvpNQOpen - frvpPreHours) * 60
-        int endTotal = frvpEndHour * 60
-        int lastTod = hour(time, FTZ) * 60 + minute(time, FTZ)
-        bool prevDay = lastTod < endTotal
-        int refDayTS = timestamp(FTZ, y, m, d, 0, 0)
-        if prevDay
-            refDayTS := refDayTS - 1
-        int ry = year(refDayTS, FTZ)
-        int rm = month(refDayTS, FTZ)
-        int rd = dayofmonth(refDayTS, FTZ)
+        // Use the most recent session window from the session range inputs.
+        // winStart = that session's start (trackedStart); winEnd = its close.
+        int winStart = trackedStart
+        int wd = dayofmonth(trackedStart, sessionZone) + (crossesMidnight ? 1 : 0)
+        int winEnd = timestamp(sessionZone, year(trackedStart, sessionZone), month(trackedStart, sessionZone), wd, endHour, endMinute)
         int found = 0
         float hi = na
         float lo = na
         bool missingVolume = false
         int available = math.min(maxBars, bar_index + 1)
         for i = 0 to available - 1
-            int fy = year(time[i], FTZ)
-            int fm = month(time[i], FTZ)
-            int fd = dayofmonth(time[i], FTZ)
-            if fy == ry and fm == rm and fd == rd
-                int tod = hour(time[i], FTZ) * 60 + minute(time[i], FTZ)
-                if tod >= startTotal and tod <= endTotal
-                    array.push(frIdx, i)
-                    found += 1
-                    hi := na(hi) ? high[i] : math.max(hi, high[i])
-                    lo := na(lo) ? low[i] : math.min(lo, low[i])
-                    missingVolume := missingVolume or na(volume[i])
-                else if tod < startTotal
-                    break
-            else
+            // Only bars that belong to the most recent session (same start time).
+            if startTime[i] == trackedStart and inSession[i]
+                array.push(frIdx, i)
+                found += 1
+                hi := na(hi) ? high[i] : math.max(hi, high[i])
+                lo := na(lo) ? low[i] : math.min(lo, low[i])
+                missingVolume := missingVolume or na(volume[i])
+            else if time[i] < winStart
                 break
         bool truncated = available == maxBars and bar_index + 1 > maxBars and found == available
         bool historyStart = found == bar_index + 1
@@ -497,8 +477,8 @@ if showFRVP and barstate.islast
                 array.push(frLines, line.new(startBar, lo + (poc + 0.5) * step, endBar, lo + (poc + 0.5) * step, color=color.yellow, width=2))
                 array.push(frLines, line.new(startBar, lo + (vah + 1) * step, endBar, lo + (vah + 1) * step, color=color.aqua))
                 array.push(frLines, line.new(startBar, lo + val * step, endBar, lo + val * step, color=color.aqua))
-                table.cell(frStatus, 0, 0, "Fixed VP • " + str.tostring(found) + " bars" + (prevDay ? " • PREV DAY" : "") + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n" + str.tostring(frvpNQOpen - frvpPreHours) + ":00–" + str.tostring(frvpEndHour) + ":00 " + FTZ + " • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
+                table.cell(frStatus, 0, 0, "Session VP • " + str.tostring(found) + " bars" + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n" + sessionHours + " " + sessionZone + " • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
             else
                 table.cell(frStatus, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
         else
-            table.cell(frStatus, 0, 0, "Not enough price range to build profile", text_color=color.white, bgcolor=color.red)
+            table.cell(frStatus, 0, 0, "Session VP: no session bars in loaded history — ensure the chart covers your session window", text_color=color.white, bgcolor=color.red)
