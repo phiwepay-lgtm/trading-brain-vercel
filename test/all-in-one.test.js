@@ -51,5 +51,24 @@ test('Fixed-range profile has independent presets and reference body/wick alloca
   }
   assert.doesNotMatch(profile, /included \+ candidate > target/);
   assert.doesNotMatch(profile, /\b(mode|areaPercent|widthPct|sessionHours|sessionZone)\b/);
-  assert.ok(profile.includes('int startBar = bar_index - array.get(frIdx, array.size(frIdx) - 1))'));
+  assert.ok(profile.includes('int startBar = bar_index - array.get(frIdx, array.size(frIdx) - 1)'));
+});
+
+
+test('Pine delimiters balance outside comments and strings', () => {
+  const stack = [];
+  const pairs = { ')': '(', ']': '[' };
+  const lines = all.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    // Pine uses line comments; quoted strings may contain delimiters or //.
+    const code = lines[i].replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\/.*$/g,
+      token => token.startsWith('//') ? '' : '""');
+    for (const char of code) {
+      if (char === '(' || char === '[') stack.push({ char, line: i + 1 });
+      else if (char === ')' || char === ']') {
+        assert.equal(stack.pop()?.char, pairs[char], `Unexpected ${char} on line ${i + 1}`);
+      }
+    }
+  }
+  assert.deepEqual(stack, [], 'Unclosed Pine delimiters');
 });
