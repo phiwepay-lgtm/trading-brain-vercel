@@ -19,7 +19,7 @@ test('All In One Pine combines every TradingView study into one indicator', () =
   ]) assert.ok(all.includes(text), `Missing anchor: ${text}`);
   // My Session Range
   for (const text of [
-    'RobMinty', 'input.session("0300-0700"', 'plot.style_stepline', 'fillgaps=false', 'showSession',
+    'RobMinty', 'input.session("1500-1900"', 'plot.style_stepline', 'fillgaps=false', 'showSession',
   ]) assert.ok(all.includes(text), `Missing session: ${text}`);
   // NQ Developing Volume Profile
   for (const text of [
@@ -30,10 +30,9 @@ test('All In One Pine combines every TradingView study into one indicator', () =
   for (const text of [
     'VVWAP (daily)', 'showVVWAP', 'dayofmonth(time) != dayofmonth(time[1])',
   ]) assert.ok(all.includes(text), `Missing VVWAP: ${text}`);
-  // Fixed Range Volume Profile (dedicated UTC+2 window)
+  // Session Volume Profile (attached to the session range window)
   for (const text of [
-    'Fixed Range VP', 'showFRVP', 'frvpNQOpen', 'frvpPreHours', 'frvpEndHour',
-    'FTZ = "UTC+2"', 'prevDay = lastTod < endTotal', 'hour(time[i], FTZ)', 'position.bottom_left',
+    'Session VP', 'showFRVP', 'trackedStart', 'startTime[i] == trackedStart', 'position.bottom_left',
   ]) assert.ok(all.includes(text), `Missing FRVP: ${text}`);
 });
 
