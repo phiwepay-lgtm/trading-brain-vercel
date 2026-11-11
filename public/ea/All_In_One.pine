@@ -489,7 +489,7 @@ if showFRVP and barstate.islast
                         vah += 1
                     else
                         val -= 1
-                int startBar = bar_index - array.get(frIdx, array.size(frIdx) - 1))
+                int startBar = bar_index - array.get(frIdx, array.size(frIdx) - 1)
                 int endBar = bar_index - array.get(frIdx, 0)
                 int maxWidth = math.max(1, math.min(400, int(math.round(math.max(1, array.size(frIdx) - 1) * frWidth / 100))))
                 for j = 0 to frRows - 1
