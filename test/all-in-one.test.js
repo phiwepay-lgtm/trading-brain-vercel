@@ -23,7 +23,7 @@ test('All In One Pine combines every TradingView study into one indicator', () =
   ]) assert.ok(all.includes(text), `Missing session: ${text}`);
   // NQ Developing Volume Profile
   for (const text of [
-    '16:00', 'NQ profile', 'f_anchor', 'areaPercent', 'max_boxes_count=400',
+    '16:00', 'NQ profile', 'f_anchor', 'areaPercent', 'max_boxes_count=500',
     'f_anchor(time[i]) != sessAnchor', 'not in loaded history',
   ]) assert.ok(all.includes(text), `Missing NQ: ${text}`);
   // VVWAP (daily reset)
@@ -32,7 +32,7 @@ test('All In One Pine combines every TradingView study into one indicator', () =
   ]) assert.ok(all.includes(text), `Missing VVWAP: ${text}`);
   // Session Volume Profile (attached to the session range window)
   for (const text of [
-    'Session VP', 'showFRVP', 'trackedStart', 'frStart[i] == frTrackedStart', 'position.bottom_left',
+    'Session VP', 'showFRVP', 'trackedStart', 'frStart[i] == winStart', 'position.bottom_left',
   ]) assert.ok(all.includes(text), `Missing FRVP: ${text}`);
 });
 
@@ -46,7 +46,7 @@ test('Fixed-range profile has independent presets and reference body/wick alloca
   for (const text of ['LonesomeTheBlue', 'https://mozilla.org/MPL/2.0/',
     'frTimePreset', 'frCustomHours', 'frZone', 'frColors', 'frCustomVAUp',
     'frTrackedStart := frStart', 'frOverlap(', 'body + 2 * topWick + 2 * bottomWick',
-    'above >= below', 'frPOCLabel := label.new', 'Session VP frozen']) {
+    'above >= below', 'array.push(frLabels, label.new', 'Session VP frozen']) {
     assert.ok(profile.includes(text), `Missing fixed-range feature: ${text}`);
   }
   assert.doesNotMatch(profile, /included \+ candidate > target/);
@@ -71,4 +71,19 @@ test('Pine delimiters balance outside comments and strings', () => {
     }
   }
   assert.deepEqual(stack, [], 'Unclosed Pine delimiters');
+});
+
+
+test('Recap profiles only discover actual session candles and respect drawing budget', () => {
+  const profile = all.split('// ====================== 6.')[1];
+  for (const text of ['frHistory = input.int(3', 'frScan = input.int(1800',
+    'if frInSession[i]', 'array.push(frSessions, anchor)',
+    'array.size(frSessions) >= frHistory', 'frStart[i] == winStart and frInSession[i]',
+    '150.0 / frHistory', 'frExtendPOC and sessionNumber == 0',
+    'label.delete(array.pop(frLabels))']) assert.ok(profile.includes(text), text);
+  for (let sessions = 1; sessions <= 5; sessions++) {
+    for (let rows = 5; rows <= 100; rows++) {
+      assert.ok(200 + 2 * sessions * Math.min(rows, Math.floor(150 / sessions)) <= 500);
+    }
+  }
 });

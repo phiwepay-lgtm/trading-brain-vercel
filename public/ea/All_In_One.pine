@@ -8,7 +8,7 @@
 // Each component has its own input group and can be switched off so you only
 // run what you need. This script has NOT been compiled or verified in TradingView.
 // On a Basic plan keep heavy parts disabled to stay within the 20-second limit.
-indicator("Trading Brain — All In One [Dark Orders + Anchor + Session + NQ]", shorttitle="All In 1", overlay=true, max_bars_back=2000, max_boxes_count=400, max_lines_count=500, max_labels_count=500)
+indicator("Trading Brain — All In One [Dark Orders + Anchor + Session + NQ]", shorttitle="All In 1", overlay=true, max_bars_back=2000, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 // ============================== 1. DARK ORDERS ==============================
 gD = "Dark Orders"
@@ -359,6 +359,8 @@ frTimePreset = input.string("Custom", "Time preset", options=["Custom", "11:00�
 frCustomHours = input.session("1500-1900", "Custom start / stop time", group=gF)
 frZone = input.string("UTC+2", "Profile timezone", group=gF, tooltip="All presets use this timezone. Use America/New_York for automatic Eastern DST.")
 frHours = frTimePreset == "11:00–19:00" ? "1100-1900" : frTimePreset == "15:00–19:00" ? "1500-1900" : frTimePreset == "09:00–17:00" ? "0900-1700" : frCustomHours
+frHistory = input.int(3, "Sessions to display (including latest)", minval=1, maxval=5, group=gF, tooltip="Completed profiles stay on their original session. Only sessions inside the scan limit are available. Rows are capped to share the drawing budget with NQ.")
+frScan = input.int(1800, "History bars to scan", minval=100, maxval=1800, group=gF, tooltip="Includes gaps between sessions. On 1-minute charts this may cover only one session; use a higher timeframe for multi-day recap.")
 frRows = input.int(24, "Row size", minval=5, maxval=100, group=gF)
 frArea = input.float(70, "Value area volume %", minval=0, maxval=100, group=gF)
 frWidth = input.float(33.33, "Profile width %", minval=5, maxval=100, group=gF)
@@ -396,10 +398,13 @@ frOverlap(float bottom, float top, float segBottom, float segTop, float vol) =>
 var array<box> frBoxes = array.new<box>()
 var array<line> frLines = array.new<line>()
 var array<int> frIdx = array.new_int(0)
-var label frPOCLabel = na
+var array<label> frLabels = array.new<label>()
+var array<int> frSessions = array.new_int()
 var table frStatus = table.new(position.bottom_left, 1, 1)
 if showFRVP and barstate.islast
-    label.delete(frPOCLabel)
+    while array.size(frLabels) > 0
+        label.delete(array.pop(frLabels))
+    array.clear(frSessions)
     array.clear(frIdx)
     while array.size(frBoxes) > 0
         box.delete(array.pop(frBoxes))
@@ -408,113 +413,132 @@ if showFRVP and barstate.islast
     if not timeframe.isintraday or timeframe.in_seconds() < 60 or timeframe.in_seconds() > 3600
         table.cell(frStatus, 0, 0, "Use standard intraday candles, 1m–1h", text_color=color.white, bgcolor=color.red)
     else
-        // Keep the last completed window until a new in-window candle arrives.
-        int winStart = frTrackedStart
-        int found = 0
-        float hi = na
-        float lo = na
-        bool missingVolume = false
-        int available = math.min(maxBars, bar_index + 1)
+        // Discover only sessions with an actual in-window candle: no future profile.
+        int available = math.min(frScan, bar_index + 1)
         for i = 0 to available - 1
-            // Only bars that belong to the most recent session (same start time).
-            if frStart[i] == frTrackedStart and frInSession[i]
-                array.push(frIdx, i)
-                found += 1
-                hi := na(hi) ? high[i] : math.max(hi, high[i])
-                lo := na(lo) ? low[i] : math.min(lo, low[i])
-                missingVolume := missingVolume or na(volume[i])
-            else if time[i] < winStart
-                break
-        bool truncated = available == maxBars and bar_index + 1 > maxBars and time[available - 1] > winStart
-        bool historyStart = bar_index + 1 <= maxBars and found > 0 and time[available - 1] > winStart
-        if found > 0 and hi == lo
-            hi += syminfo.mintick / 2
-            lo -= syminfo.mintick / 2
-        float span = hi - lo
-        array<float> ups = array.new_float(frRows, 0.0)
-        array<float> downs = array.new_float(frRows, 0.0)
-        float total = 0.0
-        if found > 0 and span > 0
-            float step = span / frRows
-            for k = 0 to array.size(frIdx) - 1
-                int i = array.get(frIdx, k)
-                float v = nz(volume[i], 0)
-                if v > 0
-                    float bodyTop = math.max(open[i], close[i])
-                    float bodyBot = math.min(open[i], close[i])
-                    float body = bodyTop - bodyBot
-                    float topWick = high[i] - bodyTop
-                    float bottomWick = bodyBot - low[i]
-                    float weight = body + 2 * topWick + 2 * bottomWick
-                    bool green = close[i] >= open[i]
-                    if weight <= 0
-                        int bucket = math.max(0, math.min(frRows - 1, int(math.floor((close[i] - lo) / step))))
-                        array.set(ups, bucket, array.get(ups, bucket) + v)
-                    else
-                        for j = 0 to frRows - 1
-                            float bottom = lo + j * step
-                            float top = bottom + step
-                            float bodyPart = frOverlap(bottom, top, bodyBot, bodyTop, body * v / weight)
-                            float wickPart = (frOverlap(bottom, top, bodyTop, high[i], 2 * topWick * v / weight) + frOverlap(bottom, top, low[i], bodyBot, 2 * bottomWick * v / weight)) / 2
-                            array.set(ups, j, array.get(ups, j) + wickPart + (green ? bodyPart : 0))
-                            array.set(downs, j, array.get(downs, j) + wickPart + (green ? 0 : bodyPart))
-                    total += v
-            if total > 0
-                int poc = 0
-                float maxTotal = -1.0
-                float maxDisplay = 0.0
-                for j = 0 to frRows - 1
-                    float u = array.get(ups, j)
-                    float dd = array.get(downs, j)
-                    float rowTotal = u + dd
-                    if rowTotal > maxTotal
-                        maxTotal := rowTotal
-                        poc := j
-                    maxDisplay := math.max(maxDisplay, rowTotal)
-                int val = poc
-                int vah = poc
-                float included = maxTotal
-                float target = total * frArea / 100.0
-                for iteration = 0 to frRows - 1
-                    if included >= target or (val == 0 and vah == frRows - 1)
+            if frInSession[i]
+                int anchor = frStart[i]
+                if array.size(frSessions) == 0
+                    array.push(frSessions, anchor)
+                else if anchor != array.get(frSessions, array.size(frSessions) - 1)
+                    if array.size(frSessions) >= frHistory
                         break
-                    float below = val > 0 ? array.get(ups, val - 1) + array.get(downs, val - 1) : -1.0
-                    float above = vah < frRows - 1 ? array.get(ups, vah + 1) + array.get(downs, vah + 1) : -1.0
-                    bool chooseAbove = above >= below
-                    float candidate = chooseAbove ? above : below
-                    if candidate < 0
-                        break
-                    included += candidate
-                    if chooseAbove
-                        vah += 1
-                    else
-                        val -= 1
-                int startBar = bar_index - array.get(frIdx, array.size(frIdx) - 1)
-                int endBar = bar_index - array.get(frIdx, 0)
-                int maxWidth = math.max(1, math.min(400, int(math.round(math.max(1, array.size(frIdx) - 1) * frWidth / 100))))
-                for j = 0 to frRows - 1
-                    float u = array.get(ups, j)
-                    float dd = array.get(downs, j)
-                    float displayVol = u + dd
-                    if displayVol > 0 and maxDisplay > 0
-                        int width = math.max(1, int(math.round(maxWidth * displayVol / maxDisplay)))
-                        float bottom = lo + step * j
-                        float top = lo + step * (j + 1)
-                        bool inVA = j >= val and j <= vah
-                        float gap = span / 500
-                        int upWidth = int(math.round(width * u / (u + dd)))
-                        if upWidth > 0
-                            array.push(frBoxes, box.new(startBar, top - gap, startBar + upWidth, bottom + gap, border_width=0, bgcolor=inVA ? frVAUp : frUp))
-                        if width > upWidth
-                            array.push(frBoxes, box.new(startBar + upWidth, top - gap, startBar + width, bottom + gap, border_width=0, bgcolor=inVA ? frVADown : frDown))
-                array.push(frLines, line.new(startBar, lo + (poc + 0.5) * step, endBar, lo + (poc + 0.5) * step, color=frPOCColor, width=frPOCWidth, extend=frExtendPOC ? extend.right : extend.none))
-                array.push(frLines, line.new(startBar, lo + (vah + 1) * step, endBar, lo + (vah + 1) * step, color=color.aqua))
-                array.push(frLines, line.new(startBar, lo + val * step, endBar, lo + val * step, color=color.aqua))
-                if frShowPOC
-                    float pocPrice = lo + (poc + 0.5) * step
-                    frPOCLabel := label.new(endBar + 15, pocPrice, "POC: " + str.tostring(pocPrice, format.mintick), style=label.style_label_left, color=frPOCColor, textcolor=color.white)
-                table.cell(frStatus, 0, 0, (frInSession ? "Session VP developing • " : "Session VP frozen • ") + str.tostring(found) + " bars" + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n" + frHours + " " + frZone + " • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
-            else
-                table.cell(frStatus, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
+                    array.push(frSessions, anchor)
+        // Reserve 200 boxes for NQ and at most 300 for session profiles.
+        int frDrawRows = math.min(frRows, int(math.floor(150.0 / frHistory)))
+        if array.size(frSessions) == 0
+            table.cell(frStatus, 0, 0, "Session VP: waiting for configured start / no session in scan history", text_color=color.white, bgcolor=color.new(color.black, 25))
         else
-            table.cell(frStatus, 0, 0, "Session VP: no session bars in loaded history — ensure the chart covers your session window", text_color=color.white, bgcolor=color.red)
+            for sessionNumber = 0 to array.size(frSessions) - 1
+                int winStart = array.get(frSessions, sessionNumber)
+                array.clear(frIdx)
+                int found = 0
+                float hi = na
+                float lo = na
+                bool missingVolume = false
+                for i = 0 to available - 1
+                    // Only bars that belong to the most recent session (same start time).
+                    if frStart[i] == winStart and frInSession[i]
+                        array.push(frIdx, i)
+                        found += 1
+                        hi := na(hi) ? high[i] : math.max(hi, high[i])
+                        lo := na(lo) ? low[i] : math.min(lo, low[i])
+                        missingVolume := missingVolume or na(volume[i])
+                    else if time[i] < winStart
+                        break
+                bool truncated = available == frScan and bar_index + 1 > frScan and time[available - 1] > winStart
+                bool historyStart = bar_index + 1 <= frScan and found > 0 and time[available - 1] > winStart
+                if found > 0 and hi == lo
+                    hi += syminfo.mintick / 2
+                    lo -= syminfo.mintick / 2
+                float span = hi - lo
+                array<float> ups = array.new_float(frDrawRows, 0.0)
+                array<float> downs = array.new_float(frDrawRows, 0.0)
+                float total = 0.0
+                if found > 0 and span > 0
+                    float step = span / frDrawRows
+                    for k = 0 to array.size(frIdx) - 1
+                        int i = array.get(frIdx, k)
+                        float v = nz(volume[i], 0)
+                        if v > 0
+                            float bodyTop = math.max(open[i], close[i])
+                            float bodyBot = math.min(open[i], close[i])
+                            float body = bodyTop - bodyBot
+                            float topWick = high[i] - bodyTop
+                            float bottomWick = bodyBot - low[i]
+                            float weight = body + 2 * topWick + 2 * bottomWick
+                            bool green = close[i] >= open[i]
+                            if weight <= 0
+                                int bucket = math.max(0, math.min(frDrawRows - 1, int(math.floor((close[i] - lo) / step))))
+                                array.set(ups, bucket, array.get(ups, bucket) + v)
+                            else
+                                for j = 0 to frDrawRows - 1
+                                    float bottom = lo + j * step
+                                    float top = bottom + step
+                                    float bodyPart = frOverlap(bottom, top, bodyBot, bodyTop, body * v / weight)
+                                    float wickPart = (frOverlap(bottom, top, bodyTop, high[i], 2 * topWick * v / weight) + frOverlap(bottom, top, low[i], bodyBot, 2 * bottomWick * v / weight)) / 2
+                                    array.set(ups, j, array.get(ups, j) + wickPart + (green ? bodyPart : 0))
+                                    array.set(downs, j, array.get(downs, j) + wickPart + (green ? 0 : bodyPart))
+                            total += v
+                    if total > 0
+                        int poc = 0
+                        float maxTotal = -1.0
+                        float maxDisplay = 0.0
+                        for j = 0 to frDrawRows - 1
+                            float u = array.get(ups, j)
+                            float dd = array.get(downs, j)
+                            float rowTotal = u + dd
+                            if rowTotal > maxTotal
+                                maxTotal := rowTotal
+                                poc := j
+                            maxDisplay := math.max(maxDisplay, rowTotal)
+                        int val = poc
+                        int vah = poc
+                        float included = maxTotal
+                        float target = total * frArea / 100.0
+                        for iteration = 0 to frDrawRows - 1
+                            if included >= target or (val == 0 and vah == frDrawRows - 1)
+                                break
+                            float below = val > 0 ? array.get(ups, val - 1) + array.get(downs, val - 1) : -1.0
+                            float above = vah < frDrawRows - 1 ? array.get(ups, vah + 1) + array.get(downs, vah + 1) : -1.0
+                            bool chooseAbove = above >= below
+                            float candidate = chooseAbove ? above : below
+                            if candidate < 0
+                                break
+                            included += candidate
+                            if chooseAbove
+                                vah += 1
+                            else
+                                val -= 1
+                        int startBar = bar_index - array.get(frIdx, array.size(frIdx) - 1)
+                        int endBar = bar_index - array.get(frIdx, 0)
+                        int maxWidth = math.max(1, math.min(400, int(math.round(math.max(1, array.size(frIdx) - 1) * frWidth / 100))))
+                        for j = 0 to frDrawRows - 1
+                            float u = array.get(ups, j)
+                            float dd = array.get(downs, j)
+                            float displayVol = u + dd
+                            if displayVol > 0 and maxDisplay > 0
+                                int width = math.max(1, int(math.round(maxWidth * displayVol / maxDisplay)))
+                                float bottom = lo + step * j
+                                float top = lo + step * (j + 1)
+                                bool inVA = j >= val and j <= vah
+                                float gap = span / 500
+                                int upWidth = int(math.round(width * u / (u + dd)))
+                                if upWidth > 0
+                                    array.push(frBoxes, box.new(startBar, top - gap, startBar + upWidth, bottom + gap, border_width=0, bgcolor=inVA ? frVAUp : frUp))
+                                if width > upWidth
+                                    array.push(frBoxes, box.new(startBar + upWidth, top - gap, startBar + width, bottom + gap, border_width=0, bgcolor=inVA ? frVADown : frDown))
+                        array.push(frLines, line.new(startBar, lo + (poc + 0.5) * step, endBar, lo + (poc + 0.5) * step, color=frPOCColor, width=frPOCWidth, extend=frExtendPOC and sessionNumber == 0 ? extend.right : extend.none))
+                        array.push(frLines, line.new(startBar, lo + (vah + 1) * step, endBar, lo + (vah + 1) * step, color=color.aqua))
+                        array.push(frLines, line.new(startBar, lo + val * step, endBar, lo + val * step, color=color.aqua))
+                        if frShowPOC
+                            float pocPrice = lo + (poc + 0.5) * step
+                            array.push(frLabels, label.new(endBar + 15, pocPrice, "POC: " + str.tostring(pocPrice, format.mintick), style=label.style_label_left, color=frPOCColor, textcolor=color.white))
+                        if sessionNumber == 0
+                            table.cell(frStatus, 0, 0, (frInSession and sessionNumber == 0 ? "Session VP developing • " : "Session VP frozen • ") + str.tostring(found) + " bars" + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n" + frHours + " " + frZone + " • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
+                    else
+                        if sessionNumber == 0
+                            table.cell(frStatus, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
+                else
+                    if sessionNumber == 0
+                        table.cell(frStatus, 0, 0, "Session VP: no session bars in loaded history — ensure the chart covers your session window", text_color=color.white, bgcolor=color.red)

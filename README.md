@@ -54,3 +54,16 @@ from LonesomeTheBlue’s *Volume Profile / Fixed Range* under MPL 2.0
 candle direction. Value area expands from POC until it reaches or exceeds target.
 This is an estimate, not actual bid/ask volume. Missing history or the shared
 maximum scan limit can make it incomplete. TradingView compilation remains unverified.
+
+### Previous-session recap
+
+Session VP now displays up to five recent sessions (default three, including the
+latest). Each profile stays anchored to its own candles; only the latest POC may
+extend right. No new profile is created before an actual candle opens inside the
+configured window. Previous completed profiles remain visible before today's start.
+Set **History bars to scan** (maximum 1800) independently of NQ. This is about 30
+hours on 1m or 150 hours on 5m; only loaded, scanned sessions can appear. Increase
+the chart timeframe for multi-day recap. Requested rows are capped to floor(150 /
+sessions requested), reserving 200 boxes for NQ within TradingView's 500-box limit.
+The latest session status reports incomplete history; older profiles can also be
+partial at the scan boundary. Pine compiler/runtime verification remains pending.
