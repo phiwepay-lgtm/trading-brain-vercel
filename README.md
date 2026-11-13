@@ -67,3 +67,23 @@ the chart timeframe for multi-day recap. Requested rows are capped to floor(150 
 sessions requested), reserving 200 boxes for NQ within TradingView's 500-box limit.
 The latest session status reports incomplete history; older profiles can also be
 partial at the scan boundary. Pine compiler/runtime verification remains pending.
+
+### Current Session VP defaults (supersedes earlier row/style defaults)
+
+The separate 16:00 New York NQ profile is now OFF by default (23:00 UTC+2
+in New York winter, 22:00 in summer). Existing saved chart inputs may retain ON;
+turn off **NQ Volume Profile → Show NQ profile** or reset the indicator settings.
+
+Session VP: Number of Rows, 200 rows, Up/Down, 40% value area, 30% width,
+left placement. Custom colours default to opaque #eaaf92 for up and value-area
+up, #3f5a3f for down and value-area down, and #DBDBDB for POC. Identical inside/
+outside colours mean value area is not colour-distinguished; VAH/VAL lines remain.
+The selected session time and timezone behaviour is unchanged.
+
+Rows now take priority over recap count. With NQ off, 500 boxes allow one
+200-row up/down profile (up to 400 boxes). Reduce rows to 83 or fewer for three
+profiles. With NQ enabled, 200 boxes are reserved for it and Session VP rows
+are capped at 150. The status reports actual rows/sessions and DRAWING LIMIT.
+This conservative budget prevents automatic deletion of older drawings. Width
+is measured over the observed session bar span, not a native TradingView drawing.
+TradingView compilation/runtime verification is still required.

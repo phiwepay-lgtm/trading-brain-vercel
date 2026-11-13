@@ -78,12 +78,28 @@ test('Recap profiles only discover actual session candles and respect drawing bu
   const profile = all.split('// ====================== 6.')[1];
   for (const text of ['frHistory = input.int(3', 'frScan = input.int(1800',
     'if frInSession[i]', 'array.push(frSessions, anchor)',
-    'array.size(frSessions) >= frHistory', 'frStart[i] == winStart and frInSession[i]',
-    '150.0 / frHistory', 'frExtendPOC and sessionNumber == 0',
+    'array.size(frSessions) >= frDisplaySessions', 'frStart[i] == winStart and frInSession[i]',
+    'frBoxBudget / (2.0 * frDrawRows)', 'frExtendPOC and sessionNumber == 0',
     'label.delete(array.pop(frLabels))']) assert.ok(profile.includes(text), text);
-  for (let sessions = 1; sessions <= 5; sessions++) {
-    for (let rows = 5; rows <= 100; rows++) {
-      assert.ok(200 + 2 * sessions * Math.min(rows, Math.floor(150 / sessions)) <= 500);
+  for (const budget of [300, 500]) {
+    for (let requested = 1; requested <= 5; requested++) {
+      for (let rows = 5; rows <= 250; rows++) {
+        const drawnRows = Math.min(rows, Math.floor(budget / 2));
+        const sessions = Math.min(requested, Math.floor(budget / (2 * drawnRows)));
+        assert.ok(2 * sessions * drawnRows <= budget);
+      }
     }
   }
+});
+
+test('Requested session styling and NQ opt-out are defaults', () => {
+  for (const text of ['showNQ = input.bool(false', 'frRows = input.int(200',
+    'frArea = input.float(40', 'frWidth = input.float(30',
+    'frColors = input.string("Custom"', 'frPOCColor = input.color(#DBDBDB',
+    'frCustomVAUp = input.color(#eaaf92', 'frCustomVADown = input.color(#3f5a3f',
+    'frCustomUp = input.color(#eaaf92', 'frCustomDown = input.color(#3f5a3f',
+    '"Number of Rows"', 'frPlacement = input.string("Left"',
+    'frVolume = input.string("Up/Down"']) assert.ok(all.includes(text), text);
+  assert.equal(Math.min(200, Math.floor(500 / 2)), 200);
+  assert.equal(Math.floor(500 / (2 * 200)), 1);
 });

@@ -202,7 +202,7 @@ fill(upper, lower, color=visible and showFill ? fillColor : na, title="Session r
 // volume is candle direction, NOT aggressor buy/sell. Zero-volume/missing bars,
 // gaps and incomplete history affect output.
 gN = "NQ Volume Profile"
-showNQ = input.bool(true, "Show NQ profile (16:00 NY)", group=gN, tooltip="Latest 16:00-to-16:00 America/New_York window. Approximate, chart-bar volume; not SVP HD.")
+showNQ = input.bool(false, "Show NQ profile (16:00 NY)", group=gN, tooltip="Latest 16:00-to-16:00 America/New_York window. Approximate, chart-bar volume; not SVP HD.")
 rows = input.int(40, "Price rows", minval=10, maxval=100, group=gN)
 maxBars = input.int(1500, "Maximum bars to scan", minval=10, maxval=1800, group=gN, tooltip="If the limit is reached, the profile can be incomplete. 1500 supports about 24 hours of 1-minute bars.")
 areaPercent = input.float(70.0, "Value area %", minval=1, maxval=100, step=1, group=gN)
@@ -359,21 +359,24 @@ frTimePreset = input.string("Custom", "Time preset", options=["Custom", "11:00�
 frCustomHours = input.session("1500-1900", "Custom start / stop time", group=gF)
 frZone = input.string("UTC+2", "Profile timezone", group=gF, tooltip="All presets use this timezone. Use America/New_York for automatic Eastern DST.")
 frHours = frTimePreset == "11:00–19:00" ? "1100-1900" : frTimePreset == "15:00–19:00" ? "1500-1900" : frTimePreset == "09:00–17:00" ? "0900-1700" : frCustomHours
-frHistory = input.int(3, "Sessions to display (including latest)", minval=1, maxval=5, group=gF, tooltip="Completed profiles stay on their original session. Only sessions inside the scan limit are available. Rows are capped to share the drawing budget with NQ.")
+frHistory = input.int(3, "Sessions to display (including latest)", minval=1, maxval=5, group=gF, tooltip="Completed profiles stay on their original session. Only sessions inside the scan limit are available. Session count is capped to preserve your row count within the drawing budget. At 200 rows, one profile fits with NQ off.")
 frScan = input.int(1800, "History bars to scan", minval=100, maxval=1800, group=gF, tooltip="Includes gaps between sessions. On 1-minute charts this may cover only one session; use a higher timeframe for multi-day recap.")
-frRows = input.int(24, "Row size", minval=5, maxval=100, group=gF)
-frArea = input.float(70, "Value area volume %", minval=0, maxval=100, group=gF)
-frWidth = input.float(33.33, "Profile width %", minval=5, maxval=100, group=gF)
-frColors = input.string("Original blue / orange", "Colour preset", options=["Original blue / orange", "Teal / red", "Custom"], group=gF)
-frCustomVAUp = input.color(color.new(color.blue, 30), "Custom value area up", group=gF)
-frCustomVADown = input.color(color.new(color.orange, 30), "Custom value area down", group=gF)
-frCustomUp = input.color(color.new(color.blue, 75), "Custom up volume", group=gF)
-frCustomDown = input.color(color.new(color.orange, 75), "Custom down volume", group=gF)
+frLayout = input.string("Number of Rows", "Rows layout", options=["Number of Rows"], group=gF)
+frRows = input.int(200, "Row size", minval=5, maxval=250, group=gF)
+frVolume = input.string("Up/Down", "Volume", options=["Up/Down"], group=gF)
+frPlacement = input.string("Left", "Placement", options=["Left"], group=gF)
+frArea = input.float(40, "Value area volume %", minval=0, maxval=100, group=gF)
+frWidth = input.float(30, "Width (% of the Box)", minval=5, maxval=100, group=gF)
+frColors = input.string("Custom", "Colour preset", options=["Original blue / orange", "Teal / red", "Custom"], group=gF)
+frCustomVAUp = input.color(#eaaf92, "Custom value area up", group=gF)
+frCustomVADown = input.color(#3f5a3f, "Custom value area down", group=gF)
+frCustomUp = input.color(#eaaf92, "Custom up volume", group=gF)
+frCustomDown = input.color(#3f5a3f, "Custom down volume", group=gF)
 frVAUp = frColors == "Custom" ? frCustomVAUp : color.new(frColors == "Teal / red" ? color.teal : color.blue, 30)
 frVADown = frColors == "Custom" ? frCustomVADown : color.new(frColors == "Teal / red" ? color.red : color.orange, 30)
 frUp = frColors == "Custom" ? frCustomUp : color.new(frColors == "Teal / red" ? color.teal : color.blue, 75)
 frDown = frColors == "Custom" ? frCustomDown : color.new(frColors == "Teal / red" ? color.red : color.orange, 75)
-frPOCColor = input.color(color.red, "POC colour", group=gF)
+frPOCColor = input.color(#DBDBDB, "POC colour", group=gF)
 frPOCWidth = input.int(2, "POC width", minval=1, maxval=5, group=gF)
 frShowPOC = input.bool(true, "Show POC label", group=gF)
 frExtendPOC = input.bool(true, "Extend POC right", group=gF)
@@ -415,17 +418,19 @@ if showFRVP and barstate.islast
     else
         // Discover only sessions with an actual in-window candle: no future profile.
         int available = math.min(frScan, bar_index + 1)
+        // Prioritise row detail over history count; NQ can consume 200 boxes.
+        int frBoxBudget = showNQ ? 300 : 500
+        int frDrawRows = math.min(frRows, int(math.floor(frBoxBudget / 2.0)))
+        int frDisplaySessions = math.min(frHistory, int(math.floor(frBoxBudget / (2.0 * frDrawRows))))
         for i = 0 to available - 1
             if frInSession[i]
                 int anchor = frStart[i]
                 if array.size(frSessions) == 0
                     array.push(frSessions, anchor)
                 else if anchor != array.get(frSessions, array.size(frSessions) - 1)
-                    if array.size(frSessions) >= frHistory
+                    if array.size(frSessions) >= frDisplaySessions
                         break
                     array.push(frSessions, anchor)
-        // Reserve 200 boxes for NQ and at most 300 for session profiles.
-        int frDrawRows = math.min(frRows, int(math.floor(150.0 / frHistory)))
         if array.size(frSessions) == 0
             table.cell(frStatus, 0, 0, "Session VP: waiting for configured start / no session in scan history", text_color=color.white, bgcolor=color.new(color.black, 25))
         else
@@ -535,7 +540,7 @@ if showFRVP and barstate.islast
                             float pocPrice = lo + (poc + 0.5) * step
                             array.push(frLabels, label.new(endBar + 15, pocPrice, "POC: " + str.tostring(pocPrice, format.mintick), style=label.style_label_left, color=frPOCColor, textcolor=color.white))
                         if sessionNumber == 0
-                            table.cell(frStatus, 0, 0, (frInSession and sessionNumber == 0 ? "Session VP developing • " : "Session VP frozen • ") + str.tostring(found) + " bars" + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n" + frHours + " " + frZone + " • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
+                            table.cell(frStatus, 0, 0, (frInSession and sessionNumber == 0 ? "Session VP developing • " : "Session VP frozen • ") + str.tostring(found) + " bars" + (truncated ? " • SCAN LIMIT" : "") + (missingVolume ? " • MISSING VOLUME" : "") + (historyStart ? " • HISTORY START" : "") + "\n" + frHours + " " + frZone + " • " + str.tostring(frDrawRows) + " rows • " + str.tostring(array.size(frSessions)) + "/" + str.tostring(frHistory) + " sessions" + (frDisplaySessions < frHistory or frDrawRows < frRows ? " • DRAWING LIMIT" : "") + " • chart-bar estimate", text_color=color.white, bgcolor=color.new(color.black, 25))
                     else
                         if sessionNumber == 0
                             table.cell(frStatus, 0, 0, "No positive volume in range", text_color=color.white, bgcolor=color.red)
