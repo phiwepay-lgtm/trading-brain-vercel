@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import IndicatorCard from '../indicators/indicator-card';
 
 const sourcePath = '/ea/Dark_Orders_Pure_Price.pine';
 
@@ -42,6 +43,24 @@ export default function DownloadCenter() {
 
   return <main className="page">
     <header><span className="brand">TRADING BRAIN <span>/</span> DARK ORDERS</span><span className="tag">TRADINGVIEW · PINE V5</span></header>
+    <section className="hero">
+      <p className="eyebrow">TRADING BRAIN — DARK ORDERS + INDICATORS + TOOLS</p>
+      <h1>Trading Brain<span>.</span></h1>
+      <p className="hero-text">Chart overlays for TradingView and tools that automate trades toward MetaTrader 5 — Dark Orders and other indicators, plus risk-based trade sizing.</p>
+      <div className="hero-actions">
+        <Link className="button primary" href="/indicators">All indicators</Link>
+        <Link className="button secondary" href="/tools">Trading tools</Link>
+      </div>
+    </section>
+    <section className="featured">
+      <h2>Featured indicators</h2>
+      <div className="grid">
+        <IndicatorCard item={{ name: 'Dark Orders — Pure Price + History', tag: 'TRADINGVIEW · PINE V5', href: '/', note: 'A price-only overlay highlighting unusual candle expansion, with a recent-signal recap.' }} />
+        <IndicatorCard item={{ name: 'All In One', tag: 'ONE SCRIPT / FOUR STUDIES', href: '/all-in-one', note: 'Dark Orders, the Trend Predictor anchor, My Session Range and the NQ volume profile in one TradingView script.' }} />
+        <IndicatorCard item={{ name: 'Supertrend HA Tester', tag: 'METATRADER 5 · TESTER ONLY', href: '/supertrend-tester', note: 'Source-only M1 Heikin Ashi research EA with an opt-in tester order.' }} />
+        <IndicatorCard item={{ name: 'Trading Tools', tag: 'TRADE WEBHOOK · MT5 SENDER', href: '/tools', note: 'Alerts to MT5: risk-based lot sizing, webhook, local sender bridge.' }} />
+      </div>
+    </section>
     <section className="intro"><p className="eyebrow">PRICE ONLY / JOURNAL CONTEXT</p><h1>Dark Orders<span>.</span></h1><p>A price-only TradingView overlay highlighting unusual candle expansion, with a recent-signal recap.</p></section>
     <section className="card" aria-labelledby="script-title">
       <div className="card-heading"><div><p className="eyebrow">TRADINGVIEW INDICATOR</p><h2 id="script-title">Pure Price + History</h2><p>Dark Orders Pure Price + History [Blackwatch]</p></div><span className="tag">.PINE</span></div>
