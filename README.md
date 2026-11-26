@@ -87,3 +87,83 @@ are capped at 150. The status reports actual rows/sessions and DRAWING LIMIT.
 This conservative budget prevents automatic deletion of older drawings. Width
 is measured over the observed session bar span, not a native TradingView drawing.
 TradingView compilation/runtime verification is still required.
+
+## Trade webhook: TradingView alerts → risk-based plan
+
+`POST /api/trade` turns a chart alert into a concrete trade plan — entry, stop
+and a lot size derived from account risk settings, computed by `lib/trade.ts`
+(`computeTradePlan`). The plan comes back as JSON.
+
+Alert fields (all required):
+
+- `symbol` — e.g. `EURUSD`
+- `direction` — `long` or `short`
+- `entry` — the alert entry price
+- `stop` — stop price; below the entry for long, above it for short
+- `balance` — account balance in the account currency
+- `riskPercent` — fraction risked per trade (1 means 1%)
+- `pipValuePerLot` — dollar value of one pip of one standard lot
+
+Optional: `digits` (default 5, e.g. 3 for USDJPY), `pipSize` (overrides
+`digits`), `minLot`, `maxLot`, `lotStep` (e.g. `0.01`).
+
+Example request:
+
+```sh
+curl -s -X POST https://your-site.app/api/trade \
+  -H 'Content-Type: application/json' \
+  -d '{"symbol":"EURUSD","direction":"long","entry":1.09456,"stop":1.09356,"balance":50000,"riskPercent":1,"pipValuePerLot":10}'
+```
+
+Example response:
+
+```json
+{"status":"ok","symbol":"EURUSD","direction":"long","entry":1.09456,"stop":1.09356,"lot":5.000000000000551,"pipsAtRisk":9.999999999998899,"riskUSD":500}
+```
+
+(`lot` ≈ 5 and `pipsAtRisk` ≈ 10 — the tiny decimal noise is normal.)
+
+This endpoint computes the plan; it does not open orders or talk to an MT5
+terminal itself. Use `scripts/mt5_sender.py` (below) to execute the plan on the
+terminal. Set the optional shared secret `TRADE_WEBHOOK_SECRET` in the
+environment and send it as the `x-trade-secret` header to require
+authentication.
+
+Tests: `npm test` includes the trade-sizing tests for `calculateLotSize`,
+`stopPipsFor`, `pipSizeForDigits` and `computeTradePlan`.
+
+## Local MT5 sender bridge: `scripts/mt5_sender.py`
+
+`scripts/mt5_sender.py` is the sender that executes plans on the terminal:
+entry, stop and the computed lot go out with `mt5.order_send`. Set
+`MT5_BRIDGE_URL` on the route (e.g. `http://127.0.0.1:8123`) and every plan is
+forwarded there; the route returns the bridge's response in the `mt5` field.
+
+Setup:
+
+1. Install the terminal-side package on the machine running the bridge:
+   `pip install MetaTrader5`.
+2. Terminal login: set `MT5_LOGIN`, `MT5_PASSWORD`, `MT5_SERVER` so
+   `mt5.initialize()` can connect, or leave them unset to use the terminal's
+   last login.
+3. Start the bridge where the terminal is reachable:
+   `python3 scripts/mt5_sender.py --host 0.0.0.0 --port 8123` (defaults:
+   `127.0.0.1:8123`, or `MT5_BRIDGE_HOST`/`MT5_BRIDGE_PORT`).
+4. Deploy or restart the route with `MT5_BRIDGE_URL=http://<bridge-host>:8123`.
+
+Plan fields the bridge accepts: `symbol`, `direction`, `entry`, `stop`,
+optional `take_profit`, `lot`, or `riskPercent` + `pipValuePerLot` (when `lot`
+is absent it reads the live balance with `mt5.account_info()`), `digits`
+(default 5), `pipSize`, `minLot`, `maxLot`, `lotStep`, `balance`, `magic`,
+`comment`, `deviation`. It checks symbol volume min/max/step and refuses a lot
+outside range or off the broker step, like the MQL research EA.
+
+Bridge responses are JSON: `ok`, `retcode`, `retcode_description`, `ticket`,
+`volume`, `price`, `sl`, `tp`, `symbol`, `direction`, `lot`. Invalid plans get
+a 400 with an `error` message.
+
+Checks: `python3 scripts/mt5_sender_test.py` runs 24 checks of the pure sizing
+and planning helpers (no terminal needed); they also run through
+`node --test test/mt5_sender.test.js` in `npm test`. End to end, the route was
+exercised here with a stub bridge: it forwards the computed plan to
+`MT5_BRIDGE_URL` and returns it as `mt5` in the route response.
